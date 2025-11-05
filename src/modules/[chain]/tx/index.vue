@@ -1,10 +1,29 @@
 <script lang="ts" setup>
-import { computed, ref, onMounted, watch } from 'vue'
-import { useBaseStore, useBlockchain, useFormatter } from '@/stores'
+import { ref, onMounted, watch } from 'vue'
+import { useBaseStore, useBlockchain, useFormatter, useMintStore, useStakingStore } from '@/stores'
 import { useRouter } from 'vue-router'
-import type { TxLocal } from '@/types'
+import { formatSeconds, operatorAddressToAccount } from '@/libs/utils'
+import { Icon } from '@iconify/vue'
+import type { SlashingParam } from '@/types'
 
-// Interface for API response transaction
+// 🔹 Props
+const props = defineProps(['validator', 'chain'])
+const validator: string = props.validator
+
+// 🔹 Refs and stores
+const slashing = ref({} as SlashingParam)
+const isLoading = ref(true)
+const loading = ref(false)
+const tab = ref('recent')
+
+const router = useRouter()
+const base = useBaseStore()
+const chainStore = useBlockchain()
+const staking = useStakingStore()
+const mintStore = useMintStore()
+const format = useFormatter()
+
+// 🔹 Transaction data
 interface ApiTransaction {
   id: string
   hash: string
@@ -22,18 +41,16 @@ interface ApiTransaction {
   tx_data: any
 }
 
-const props = defineProps(['chain'])
-const router = useRouter()
-
-const tab = ref('recent')
-const base = useBaseStore()
-const chainStore = useBlockchain()
-const format = useFormatter()
-
-const hashReg = /^[A-Z\d]{64}$/
+const transactions = ref<ApiTransaction[]>([])
+const currentPage = ref(1)
+const itemsPerPage = ref(25)
+const totalTransactions = ref(0)
+const totalPages = ref(0)
+const pageSizeOptions = [10, 25, 50, 100]
 const hash = ref('')
+const hashReg = /^[A-Z\d]{64}$/
 
-// Map frontend chain names to API chain names
+// 🔹 Chain mapping for API
 const getApiChainName = (chainName: string) => {
   const chainMap: Record<string, string> = {
     'pocket-beta': 'pocket-testnet-beta',
@@ -46,35 +63,17 @@ const getApiChainName = (chainName: string) => {
 const current = chainStore?.current?.chainName || props.chain || 'pocket-beta'
 const apiChainName = getApiChainName(current)
 
-// 🔹 Pagination state
-const currentPage = ref(1)
-const itemsPerPage = ref(25)
-const totalTransactions = ref(0)
-const totalPages = ref(0)
-const transactions = ref<ApiTransaction[]>([])
-const loading = ref(false)
-
-// 🔹 Page size options
-const pageSizeOptions = [10, 25, 50, 100]
-
-onMounted(async () => {
-  tab.value = String(router.currentRoute.value.query.tab || 'recent')
-  await loadTransactions()
-})
-
-// 🔹 Load transactions from API
+// 🔹 Load transactions
 async function loadTransactions() {
   loading.value = true
   try {
-    const url = `/api/v1/transactions?page=${currentPage.value}&limit=${itemsPerPage.value}&chain=${apiChainName}`
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+    const url = `${baseUrl}/api/v1/transactions?page=${currentPage.value}&limit=${itemsPerPage.value}&chain=${apiChainName}`
+
     const response = await fetch(url)
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+
     const data = await response.json()
-    
     transactions.value = data.data || []
     totalTransactions.value = data.meta?.total || 0
     totalPages.value = data.meta?.totalPages || 0
@@ -88,25 +87,49 @@ async function loadTransactions() {
   }
 }
 
-// 🔹 Watch for page size changes
+// 🔹 Main onMounted (merged version)
+onMounted(async () => {
+  isLoading.value = true
+  try {
+    staking.init()
+
+    if (validator) {
+      operatorAddressToAccount(validator)
+    }
+
+    try {
+      const res = await chainStore.rpc.getSlashingParams()
+      slashing.value = res.params
+    } catch (err) {
+      console.warn('Failed to load slashing params:', err)
+    }
+
+    tab.value = String(router.currentRoute.value.query.tab || 'recent')
+    await loadTransactions()
+  } catch (error) {
+    console.error('Error during initialization:', error)
+  } finally {
+    isLoading.value = false
+  }
+})
+
+// 🔹 Watchers for pagination
 watch(itemsPerPage, () => {
   currentPage.value = 1
   loadTransactions()
 })
-
-// 🔹 Watch for page changes
 watch(currentPage, () => {
   loadTransactions()
 })
 
-// 🔍 Search function
+// 🔹 Search function
 function search() {
   if (hashReg.test(hash.value)) {
     router.push({ path: `/${current}/tx/${hash.value}` })
   }
 }
 
-// 🔹 Pagination functions
+// 🔹 Pagination controls
 function nextPage() {
   if (currentPage.value < totalPages.value) currentPage.value++
 }
@@ -124,9 +147,60 @@ function changePageSize(newSize: number) {
 }
 </script>
 
+
 <template>
   <div>
     <p class="bg-[#09279F] dark:bg-base-100 text-2xl rounded-xl px-4 py-4 my-4 font-bold text-white">Transactions</p>
+    <!-- 🔹 Stats Cards -->
+    <div class="grid sm:grid-cols-1 md:grid-cols-4 py-4 gap-4 mb-4">
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:trending-up" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.inflation') }}</div>
+          <div class="font-bold">{{ format.percent(mintStore.inflation) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:lock-open-outline" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.unbonding_time') }}</div>
+          <div class="font-bold">{{ formatSeconds(staking.params?.unbonding_time) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:alert-octagon-outline" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.double_sign_slashing') }}</div>
+          <div class="font-bold">{{ format.percent(slashing.slash_fraction_double_sign) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:pause" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.downtime_slashing') }}</div>
+          <div class="font-bold">{{ format.percent(slashing.slash_fraction_downtime) }}</div>
+        </span>
+      </div>
+    </div>
     <div
       v-show="tab === 'recent'"
       class="bg-[#EFF2F5] dark:bg-base-100 px-0.5 pt-0.5 pb-4 rounded-xl shadow-md mb-4"

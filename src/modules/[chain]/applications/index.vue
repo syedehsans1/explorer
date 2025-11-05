@@ -1,68 +1,71 @@
 <script lang="ts" setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useBlockchain, useFormatter } from '@/stores'
-import { PageRequest, type Pagination, type Application } from '@/types'
+import { useBlockchain, useFormatter, useMintStore, useStakingStore, useBaseStore } from '@/stores'
+import { PageRequest, type Pagination, type Application, type SlashingParam } from '@/types'
+import { formatSeconds, operatorAddressToAccount } from '@/libs/utils'
+import { Icon } from '@iconify/vue'
 
-const props = defineProps<{ chain: string }>()
+const props = defineProps(['validator', 'chain'])
+const validator: string = props.validator
 
 const chainStore = useBlockchain()
 const format = useFormatter()
+const mintStore = useMintStore()
+const staking = useStakingStore()
+const base = useBaseStore()
 
-// ✅ Main data list
-const list = ref<Application[]>([])
+const slashing = ref({} as SlashingParam)
+const isLoading = ref(true)
 const loading = ref(false)
 
+const list = ref<Application[]>([])
 const pageRequest = ref(new PageRequest())
 const pageResponse = ref({} as Pagination)
-
 const currentPage = ref(1)
 const itemsPerPage = ref(25)
 
-// ✅ Status text
 const value = ref('stake')
 const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstaked'))
 
-// ✅ Server-side pagination logic
 const totalPages = computed(() => {
   const total = parseInt(pageResponse.value.total || '0')
-  if (total === 0) return 0
-  return Math.ceil(total / itemsPerPage.value)
+  return total === 0 ? 0 : Math.ceil(total / itemsPerPage.value)
 })
 
 const totalApplications = computed(() => parseInt(pageResponse.value.total || '0'))
 
-// ✅ Client-side sorting (applied after server returns page data)
 const sortedList = computed(() => {
   return [...list.value].sort((a, b) => {
     const aStake = parseInt(a.stake.amount || '0')
     const bStake = parseInt(b.stake.amount || '0')
-    return bStake - aStake // high to low
+    return bStake - aStake
   })
 })
 
-// 🔹 Watch for page changes
-watch(currentPage, () => {
-  loadApplications()
-})
-
-// 🔹 Watch for page size changes
+// ✅ Watchers
+watch(currentPage, () => loadApplications())
 watch(itemsPerPage, () => {
   currentPage.value = 1
   loadApplications()
 })
 
-// ✅ Load data from RPC
-async function loadApplications() {
-  if (!chainStore.rpc) {
-    await waitForRpc()
+// ✅ RPC wait helper
+async function waitForRpc() {
+  while (!chainStore.rpc) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
   }
-  
+}
+
+// ✅ Load applications (main data)
+async function loadApplications() {
+  if (!chainStore.rpc) await waitForRpc()
+
   loading.value = true
   try {
     pageRequest.value.setPageSize(itemsPerPage.value)
     pageRequest.value.setPage(currentPage.value)
     pageRequest.value.count_total = true
-    
+
     const response = await chainStore.rpc.getApplications(pageRequest.value)
     list.value = response.applications || []
     pageResponse.value = response.pagination || {}
@@ -75,47 +78,94 @@ async function loadApplications() {
   }
 }
 
-async function waitForRpc() {
-  while (!chainStore.rpc) {
-    console.log('⏳ Waiting for chainStore.rpc...')
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  }
-}
-
-// ✅ Pagination methods
+// ✅ Pagination controls
 function goToFirst() {
-  if (currentPage.value !== 1) {
-    currentPage.value = 1
-  }
+  if (currentPage.value !== 1) currentPage.value = 1
 }
-
 function goToLast() {
-  if (currentPage.value !== totalPages.value && totalPages.value > 0) {
+  if (currentPage.value !== totalPages.value && totalPages.value > 0)
     currentPage.value = totalPages.value
-  }
 }
-
 function nextPage() {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
-  }
+  if (currentPage.value < totalPages.value) currentPage.value++
 }
-
 function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value--
-  }
+  if (currentPage.value > 1) currentPage.value--
 }
 
-// ✅ Mounted
-onMounted(() => {
-  loadApplications()
+onMounted(async () => {
+  isLoading.value = true
+  useStakingStore().init()
+  operatorAddressToAccount(validator)
+
+  try {
+    const res = await chainStore.rpc.getSlashingParams()
+    slashing.value = res.params
+    await loadApplications()
+  } catch (error) {
+    console.error('Error initializing:', error)
+  } finally {
+    isLoading.value = false
+  }
 })
 </script>
 
 <template>
   <div class="mb-[2vh]">
     <p class="bg-[#09279F] dark:bg-base-100 text-2xl rounded-xl px-4 py-4 my-4 font-bold text-white">Applications</p>
+    
+    <!-- 🔹 Stats Cards -->
+    <div class="grid sm:grid-cols-1 md:grid-cols-4 py-4 gap-4 mb-4">
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:trending-up" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.inflation') }}</div>
+          <div class="font-bold">{{ format.percent(mintStore.inflation) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:lock-open-outline" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.unbonding_time') }}</div>
+          <div class="font-bold">{{ formatSeconds(staking.params?.unbonding_time) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:alert-octagon-outline" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.double_sign_slashing') }}</div>
+          <div class="font-bold">{{ format.percent(slashing.slash_fraction_double_sign) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:pause" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.downtime_slashing') }}</div>
+          <div class="font-bold">{{ format.percent(slashing.slash_fraction_downtime) }}</div>
+        </span>
+      </div>
+    </div>
+
+    <!-- 🔹 Applications Table -->
     <div class="bg-base-200 dark:bg-base-100 rounded-xl p-2">
       <table class="table w-full table-compact rounded-xl">
         <thead class="dark:bg-base-100 bg-base-200 sticky top-0 border-0">
@@ -139,59 +189,35 @@ onMounted(() => {
               </div>
             </td>
           </tr>
+
           <tr v-else-if="sortedList.length === 0" class="text-center">
             <td colspan="7" class="py-8">
               <div class="text-gray-500">No applications found</div>
             </td>
           </tr>
-          <tr
-            v-else
-            v-for="(item, index) in sortedList"
-            :key="item.address"
-            class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl"
-          >
-            <td>{{ index + 1 + (currentPage - 1) * itemsPerPage }}</td>
 
+          <tr v-else v-for="(item, index) in sortedList" :key="item.address" class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+            <td>{{ index + 1 + (currentPage - 1) * itemsPerPage }}</td>
             <td>
               <div class="flex flex-col">
-                <RouterLink
-                  :to="`/${chainStore.chainName}/account/${item?.address}`"
-                  class="text-sm text-[#09279F] dark:invert font-medium truncate"
-                >
-                  {{ item.address }}
-                </RouterLink>
-                <span class="text-xs text-[#171C1F] dark:text-secondary truncate">
-                  {{ item.address }}
-                </span>
+                <RouterLink :to="`/${chainStore.chainName}/account/${item?.address}`" class="text-sm text-[#09279F] dark:invert font-medium truncate">{{ item.address }}</RouterLink>
+                <span class="text-xs text-[#171C1F] dark:text-secondary truncate">{{ item.address }}</span>
               </div>
             </td>
-
             <td class="font-bold dark:text-secondary">{{ format.formatToken(item.stake) }}</td>
             <td class="dark:text-secondary">{{ item.balance ? format.formatToken(item.balance) : '-' }}</td>
             <td>{{ item.service_configs?.length || 0 }}</td>
-            <td>
-              {{
-                item.service_configs
-                  ?.map((sc: any) =>
-                    sc.service_name?.length > 0 ? sc.service_name : sc.service_id
-                  )
-                  .join(', ')
-              }}
-            </td>
+            <td>{{item.service_configs ?.map((sc: any) => sc.service_name?.length > 0 ? sc.service_name : sc.service_id).join(', ')}}</td>
             <td class="text-success">{{ statusText }}</td>
           </tr>
         </tbody>
       </table>
 
-      <!-- ✅ Pagination Bar -->
+      <!-- 🔹 Pagination Bar -->
       <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <!-- Page Size Dropdown -->
         <div class="flex items-center gap-2">
           <span class="text-sm text-gray-600">Show:</span>
-          <select 
-            v-model="itemsPerPage" 
-            class="select select-bordered select-sm w-20"
-          >
+          <select v-model="itemsPerPage" class="select select-bordered select-sm w-20">
             <option :value="10">10</option>
             <option :value="25">25</option>
             <option :value="50">50</option>
@@ -200,46 +226,14 @@ onMounted(() => {
           <span class="text-sm text-gray-600">per page</span>
         </div>
 
-        <!-- Pagination Info and Controls -->
         <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalApplications) }} of {{ totalApplications }} applications
-          </span>
-          
+          <span class="text-sm text-gray-600"> Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalApplications) }} of {{ totalApplications }}applications</span>
           <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="prevPage"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage" 
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast" 
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              Last
-            </button>
+            <button @click="goToFirst" :disabled="currentPage === 1 || totalPages === 0" class="page-btn">First</button>
+            <button @click="prevPage" :disabled="currentPage === 1 || totalPages === 0" class="page-btn">&lt;</button>
+            <span class="text-xs px-2">Page {{ currentPage }} of {{ totalPages }}</span>
+            <button @click="nextPage" :disabled="currentPage === totalPages || totalPages === 0" class="page-btn">&gt;</button>
+            <button @click="goToLast" :disabled="currentPage === totalPages || totalPages === 0" class="page-btn">Last</button>
           </div>
         </div>
       </div>
@@ -247,20 +241,19 @@ onMounted(() => {
   </div>
 </template>
 
-<route>
-{
-  meta: {
-    i18n: 'applications',
-    order: 4
-  }
-}
-</route>
-
 <style scoped>
+.page-btn {
+  background: #f8f9fa;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  color: #007bff;
+  transition: background-color 0.2s;
+}
 .page-btn:hover {
   background-color: #e9ecef;
 }
-
 .page-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

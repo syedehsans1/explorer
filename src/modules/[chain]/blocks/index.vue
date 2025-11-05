@@ -1,13 +1,23 @@
 <script lang="ts" setup>
 import { computed, ref, reactive, onMounted, nextTick, onBeforeUnmount, watch } from 'vue';
-import { useBaseStore, useFormatter } from '@/stores';
-import { PageRequest, type Pagination, type Block } from '@/types';
+import { useBaseStore, useFormatter, useMintStore, useStakingStore } from '@/stores';
+import { PageRequest, type Pagination, type Block, type SlashingParam } from '@/types';
 import { formatDate } from '@vueuse/core';
+import { formatSeconds, operatorAddressToAccount } from '@/libs/utils'
+import { Icon } from '@iconify/vue'
 
-const props = defineProps(['chain']);
+const props = defineProps(['validator', 'chain'])
+const validator: string = props.validator
+
 const tab = ref('blocks');
 const base = useBaseStore();
 const format = useFormatter();
+
+const slashing = ref({} as SlashingParam)
+const isLoading = ref(true)
+
+const mintStore = useMintStore()
+const staking = useStakingStore()
 
 // Server-side blocks fetching (consistent with TX page)
 interface ApiBlockItem {
@@ -83,9 +93,21 @@ watch(apiChainName, (n, o) => {
   }
 });
 
-onMounted(() => {
-  loadBlocks();
-});
+onMounted(async () => {
+  isLoading.value = true
+  useStakingStore().init()
+  operatorAddressToAccount(validator)
+
+  try {
+    const res = await chainStore.rpc.getSlashingParams()
+    slashing.value = res.params
+    await loadBlocks()
+  } catch (error) {
+    console.error('Error initializing:', error)
+  } finally {
+    isLoading.value = false
+  }
+})
 
 // ✅ Pagination functions
 function goToFirst() {
@@ -105,6 +127,56 @@ function prevPage() {
 <template>
   <div>
     <p class="bg-[#09279F] dark:bg-base-100 text-2xl rounded-xl px-4 py-4 my-4 font-bold text-white">Blocks</p>
+    <!-- 🔹 Stats Cards -->
+    <div class="grid sm:grid-cols-1 md:grid-cols-4 py-4 gap-4 mb-4">
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:trending-up" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.inflation') }}</div>
+          <div class="font-bold">{{ format.percent(mintStore.inflation) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:lock-open-outline" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.unbonding_time') }}</div>
+          <div class="font-bold">{{ formatSeconds(staking.params?.unbonding_time) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:alert-octagon-outline" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.double_sign_slashing') }}</div>
+          <div class="font-bold">{{ format.percent(slashing.slash_fraction_double_sign) }}</div>
+        </span>
+      </div>
+
+      <div class="flex dark:bg-base-100 bg-base-200 rounded-xl p-4">
+        <span>
+          <div class="bg-[#5E9AE4] w-9 h-9 rounded flex items-center justify-center mr-2">
+            <Icon class="text-[#ffffff]" icon="mdi:pause" size="32" />
+          </div>
+        </span>
+        <span>
+          <div class="text-xs text-[#64748B]">{{ $t('staking.downtime_slashing') }}</div>
+          <div class="font-bold">{{ format.percent(slashing.slash_fraction_downtime) }}</div>
+        </span>
+      </div>
+    </div>
     <div class="tabs tabs-boxed bg-transparent mb-4">
       <a
         class="tab text-gray-400 uppercase"
