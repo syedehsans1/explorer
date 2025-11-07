@@ -79,7 +79,9 @@ async function loadAll(address: string) {
 }
 
 onMounted(() => {
-  loadAll(props.address)
+  loadAll(props.address);
+  loadRewardsData();
+  loadRelaysData();;
 });
 
 onUnmounted(() => {
@@ -299,43 +301,125 @@ const performanceRows = ref<PerformanceRow[]>([])
 const loadingPerformance = ref(false)
 const performanceError = ref('')
 
+const chartType = ref("bar");
+const isLoading = ref(true);
+const relaysChartType = ref("bar");
+const isRelaysLoading = ref(true);
+
 // Chart data
 const rewardsChartSeries = ref([{ name: 'Total Rewards', data: [] as number[] }]);
 const relaysChartSeries = ref([{ name: 'Total Relays', data: [] as number[] }]);
 
+
+// const rewardsChartOptions = ref({
+//   chart: { type: 'area', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+//   colors: ['#A3E635'],
+//   dataLabels: { enabled: false },
+//   stroke: { curve: 'smooth', width: 2 },
+//   fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] } },
+//   grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
+//   markers: { size: 0 },
+//   xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
+//   yaxis: { 
+//     labels: { 
+//       style: { colors: 'rgb(116, 109, 105)' }, 
+//       formatter: (v: number) => {
+//         if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+//         if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
+//         return v.toFixed(2);
+//       }
+//     } 
+//   },
+//   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' POKT' } }
+// });
+
 const rewardsChartOptions = ref({
-  chart: { type: 'area', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
-  colors: ['#A3E635'],
-  dataLabels: { enabled: false },
-  stroke: { curve: 'smooth', width: 2 },
-  fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] } },
-  grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
+  chart: { type: chartType.value, height: 280, toolbar: { show: false }, zoom: { enabled: false }},
+  colors: ["#A3E635"], dataLabels: { enabled: false }, stroke: { curve: "smooth", width: 2 },
+  fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] }},
+  grid: { borderColor: "rgba(255, 255, 255, 0.1)", row: { colors: ["transparent"], opacity: 0.5 }},
   markers: { size: 0 },
-  xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
-  yaxis: { 
-    labels: { 
-      style: { colors: 'rgb(116, 109, 105)' }, 
-      formatter: (v: number) => {
-        if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
-        if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
-        return v.toFixed(2);
-      }
-    } 
-  },
-  tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' POKT' } }
+  xaxis: { categories: [], labels: { style: { colors: "rgb(116, 109, 105)" }, rotate: -45, rotateAlways: false }},
+  yaxis: { labels: { style: { colors: "rgb(116, 109, 105)" }, formatter: (v) => { 
+    if (v >= 1000000) return (v / 1000000).toFixed(1) + "M"; 
+    if (v >= 1000) return (v / 1000).toFixed(1) + "K"; return v.toFixed(2); 
+  }}},
+  tooltip: { theme: "dark", y: { formatter: (v) => v.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " POKT" }}
 });
 
+// ✅ Generate mock data for last 30 days
+const loadRewardsData = async () => {
+  try {
+    isLoading.value = true;
+    await new Promise((r) => setTimeout(r, 1000)); // simulate backend delay
+
+    const mockDates = [];
+    const mockValues = [];
+
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      mockDates.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+      // random reward value for demo
+      mockValues.push(Math.floor(Math.random() * 10000) + 500);
+    }
+
+    rewardsChartOptions.value.xaxis.categories = mockDates;
+    rewardsChartSeries.value = [{ name: "Total Rewards", data: mockValues }];
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 const relaysChartOptions = ref({
-  chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
-  colors: ['#5E9AE4'],
-  dataLabels: { enabled: false },
-  stroke: { curve: 'smooth', width: 2 },
-  grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
+  chart: { type: "line", height: 280, toolbar: { show: false }, zoom: { enabled: false }},
+  colors: ["#5E9AE4"], dataLabels: { enabled: false }, stroke: { curve: "smooth", width: 2 },
+  grid: { borderColor: "rgba(255, 255, 255, 0.1)", row: { colors: ["transparent"], opacity: 0.5 }},
   markers: { size: 0 },
-  xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
-  yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000).toFixed(0) + 'K' } },
-  tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' relays' } }
+  xaxis: { categories: [], labels: { style: { colors: "rgb(116, 109, 105)" }, rotate: -45, rotateAlways: false}},
+  yaxis: { labels: { style: { colors: "rgb(116, 109, 105)" }, formatter: (v) => (v / 1000).toFixed(0) + "K" }},
+  tooltip: { theme: "dark", y: { formatter: (v) => v.toLocaleString() + " relays" }}
 });
+
+// ✅ Simulated 30 days data
+const loadRelaysData = async () => {
+  try {
+    isRelaysLoading.value = true;
+    await new Promise((r) => setTimeout(r, 1000)); // simulate delay
+
+    const mockDates = [];
+    const mockValues = [];
+    const today = new Date();
+
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      mockDates.push(
+        d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      );
+      mockValues.push(Math.floor(Math.random() * 900000) + 100000); // random relay data
+    }
+
+    relaysChartOptions.value.xaxis.categories = mockDates;
+    relaysChartSeries.value = [{ name: "Total Relays", data: mockValues }];
+  } finally {
+    isRelaysLoading.value = false;
+  }
+};
+
+// const relaysChartOptions = ref({
+//   chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+//   colors: ['#5E9AE4'],
+//   dataLabels: { enabled: false },
+//   stroke: { curve: 'smooth', width: 2 },
+//   grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
+//   markers: { size: 0 },
+//   xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
+//   yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000).toFixed(0) + 'K' } },
+//   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' relays' } }
+// });
+
 
 // Summary metrics
 const summaryMetrics = computed(() => {
@@ -1106,8 +1190,7 @@ async function loadAddressPerformance(address: string) {
 
     <!-- Charts -->
     <div v-if="performanceRows.length > 0 && !loadingPerformance" class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-      <div
-        class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100">
+      <!-- <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100">
         <div class="flex items-center mb-4">
           <div class="text-lg font-semibold text-main ml-5">Daily Rewards Trend</div>
         </div>
@@ -1116,9 +1199,75 @@ async function loadAddressPerformance(address: string) {
             <ApexCharts type="area" height="280" :options="rewardsChartOptions" :series="rewardsChartSeries" />
           </div>
         </div>
+      </div> -->
+
+      <!-- Daily Rewards Trend ApexCharts with buttons -->
+      <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100 relative">
+        <div class="flex items-center mb-4">
+          <div class="text-lg font-semibold text-main ml-5">Daily Rewards Trend</div>
+        </div>
+
+        <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md">
+          <div class="h-80 relative">
+            <!-- ✅ Show chart if data loaded -->
+            <ApexCharts v-if="!isLoading && rewardsChartSeries[0].data.length > 0" :key="chartType" :type="chartType" height="280" :options="rewardsChartOptions" :series="rewardsChartSeries"/>
+
+            <!-- ✅ Loading Spinner -->
+            <div v-else class="flex items-center justify-center h-full">
+              <div class="loading loading-spinner loading-md"></div>
+              <span class="ml-2 text-secondary">Loading chart data...</span>
+            </div>
+
+            <!-- ✅ Chart type buttons -->
+            <div class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
+              <button @click="chartType = 'bar'" :class="['tab', chartType === 'bar' ? 'tab-active bg-[#09279F] text-white' : '']" title="Bar Chart">
+                <Icon icon="mdi:chart-bar" class="text-sm" />
+              </button>
+              <button @click="chartType = 'area'" :class="['tab', chartType === 'area' ? 'tab-active bg-[#09279F] text-white' : '']" title="Area Chart">
+                <Icon icon="mdi:chart-areaspline" class="text-sm" />
+              </button>
+              <button @click="chartType = 'line'" :class="['tab', chartType === 'line' ? 'tab-active bg-[#09279F] text-white' : '']" title="Line Chart">
+                <Icon icon="mdi:chart-line" class="text-sm" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-      <div
-        class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100">
+
+      <!-- Daily Relays Trend ApexCharts with buttons -->
+      <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100 relative">
+        <div class="flex items-center mb-4">
+          <div class="text-lg font-semibold text-main ml-5">Daily Relays Trend</div>
+        </div>
+
+        <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md">
+          <div class="h-80 relative">
+            <!-- ✅ Chart -->
+            <ApexCharts v-if="!isRelaysLoading && relaysChartSeries[0].data.length > 0" :key="relaysChartType" :type="relaysChartType" height="280" :options="relaysChartOptions" :series="relaysChartSeries"/>
+
+            <!-- ✅ Loading Spinner -->
+            <div v-else class="flex items-center justify-center h-full">
+              <div class="loading loading-spinner loading-md"></div>
+              <span class="ml-2 text-secondary">Loading chart data...</span>
+            </div>
+
+            <!-- ✅ Chart Type Buttons -->
+            <div class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
+              <button @click="relaysChartType = 'bar'" :class="[ 'tab', relaysChartType === 'bar' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Bar Chart">
+                <Icon icon="mdi:chart-bar" class="text-sm" />
+              </button>
+              <button @click="relaysChartType = 'area'" :class="[ 'tab', relaysChartType === 'area' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Area Chart">
+                <Icon icon="mdi:chart-areaspline" class="text-sm" />
+              </button>
+              <button @click="relaysChartType = 'line'" :class="[ 'tab', relaysChartType === 'line' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Line Chart">
+                <Icon icon="mdi:chart-line" class="text-sm" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100">
         <div class="flex items-center mb-4">
           <div class="text-lg font-semibold text-main ml-5">Daily Relays Trend</div>
         </div>
@@ -1127,7 +1276,7 @@ async function loadAddressPerformance(address: string) {
             <ApexCharts type="line" height="280" :options="relaysChartOptions" :series="relaysChartSeries" />
           </div>
         </div>
-      </div>
+      </div> -->
     </div>
 
     <!-- Detailed Table -->

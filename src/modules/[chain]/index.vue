@@ -1,3 +1,4 @@
+
 <script lang="ts" setup>
 import MdEditor from 'md-editor-v3';
 import PriceMarketChart from '@/components/charts/PriceMarketChart.vue';
@@ -70,27 +71,20 @@ const activeValidatorsCount = computed(() => {
 // Add loading state tracking
 const isNetworkStatusLoading = ref(true);
 
+const chartType = ref("bar");
+
 const txChartOptions = ref({
   chart: {
-    type: 'area',
+    type: "bar",
     height: 280,
-    toolbar: {
-      show: false
-    },
-    zoom: {
-      enabled: false
-    }
+    toolbar: { show: false },
+    zoom: { enabled: false }
   },
-  colors: ['#A3E635'], // Light green color
-  dataLabels: {
-    enabled: false
-  },
-  stroke: {
-    curve: 'smooth',
-    width: 2
-  },
+  colors: ["#A3E635"],
+  dataLabels: { enabled: false },
+  stroke: { curve: "smooth", width: 2 },
   fill: {
-    type: 'gradient',
+    type: "gradient",
     gradient: {
       shadeIntensity: 1,
       opacityFrom: 0.7,
@@ -99,55 +93,36 @@ const txChartOptions = ref({
     }
   },
   grid: {
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    row: {
-      colors: ['transparent'],
-      opacity: 0.5
-    }
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    row: { colors: ["transparent"], opacity: 0.5 }
   },
-  markers: {
-    size: 0
-  },
+  markers: { size: 0 },
   xaxis: {
     categories: [],
     labels: {
-      style: {
-        colors: 'rgb(116, 109, 105)'
-      },
-      formatter: function (value: string) {
-        return value;
-      }
+      style: { colors: "rgb(116, 109, 105)" },
+      formatter: (v) => v
     },
-    axisBorder: {
-      show: false
-    },
-    axisTicks: {
-      show: false
-    }
+    axisBorder: { show: false },
+    axisTicks: { show: false }
   },
   yaxis: {
     labels: {
-      style: {
-        colors: 'rgb(116, 109, 105)'
-      },
-      formatter: function (value: number) {
-        return format.formatNumber(value);
-      }
+      style: { colors: "rgb(116, 109, 105)" },
+      formatter: (v) => v.toLocaleString()
     }
   },
   tooltip: {
-    theme: 'dark',
+    theme: "dark",
     y: {
-      formatter: function (value: number) {
-        return format.formatNumber(value) + ' transactions';
-      }
+      formatter: (v) => v.toLocaleString() + " transactions"
     }
   }
 });
 
 const txChartSeries = ref([
   {
-    name: 'Transactions',
+    name: "Transactions",
     data: []
   }
 ]);
@@ -1635,14 +1610,39 @@ watch(() => base.blocktime, (newVal, oldVal) => {
       </div>
 
       <!-- Transaction History Chart -->
-      <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100">
+      <!-- <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100">
         <div class="flex items-center mb-4">
-          <!-- <Icon icon="mdi:chart-timeline-variant" class="text-2xl text-warning mr-2" /> -->
           <div class="text-lg font-semibold text-main ml-5">Transaction History</div>
         </div>
         <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md">
           <div class="h-80">
             <ApexCharts type="area" height="280" :options="txChartOptions" :series="txChartSeries" />
+          </div>
+        </div>
+      </div> -->
+
+      <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100 relative">
+        <div class="flex items-center mb-4">
+          <div class="text-lg font-semibold text-main ml-5">Transaction History</div>
+        </div>
+        <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md">
+          <div class="h-80">
+            <div v-if="isLoading || txChartSeries[0].data.length === 0" class="flex items-center justify-center h-full">
+              <div class="loading loading-spinner loading-md"></div>
+              <span class="ml-2 text-secondary">Loading chart data...</span>
+            </div>
+            <ApexCharts :key="chartType" :type="chartType" height="280" :options="txChartOptions" :series="txChartSeries"/>
+          </div>
+          <div class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
+            <button @click="chartType = 'bar'" :class="[ 'tab', chartType === 'bar' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Bar Chart">
+              <Icon icon="mdi:chart-bar" class="text-sm" />
+            </button>
+            <button @click="chartType = 'area'" :class="[ 'tab', chartType === 'area' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Area Chart">
+              <Icon icon="mdi:chart-areaspline" class="text-sm" />
+            </button>
+            <button @click="chartType = 'line'" :class="[ 'tab', chartType === 'line' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Line Chart">
+              <Icon icon="mdi:chart-line" class="text-sm" />
+            </button>
           </div>
         </div>
       </div>

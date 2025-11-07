@@ -92,17 +92,75 @@ const rewardsChartSeries = ref([{ name: 'Total Rewards (upokt)', data: [] as num
 const efficiencyChartSeries = ref([{ name: 'Avg Efficiency %', data: [] as number[] }]);
 const relaysChartSeries = ref([{ name: 'Total Relays', data: [] as number[] }]);
 
+const topRewardsChartType = ref("bar"); // default bar chart
+const loadingTopRewards = ref(true);
+
 // Bar chart for top services by rewards (most recent hour)
 const topServicesChartSeries = ref([{ name: 'Rewards (upokt)', data: [] as number[] }]);
+// const topServicesChartOptions = ref({
+//   chart: { type: 'bar', height: 350, toolbar: { show: false } },
+//   colors: ['#A3E635'],
+//   dataLabels: { enabled: true, formatter: (v: number) => (v / 1000000).toFixed(2) + 'M', style: { colors: ['#000'] } },
+//   plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 4 } },
+//   grid: { borderColor: 'rgba(255, 255, 255, 0.1)' },
+//   xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
+//   yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000000).toFixed(2) + 'M' } },
+//   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' upokt' } }
+// });
+
 const topServicesChartOptions = ref({
-  chart: { type: 'bar', height: 350, toolbar: { show: false } },
-  colors: ['#A3E635'],
-  dataLabels: { enabled: true, formatter: (v: number) => (v / 1000000).toFixed(2) + 'M', style: { colors: ['#000'] } },
-  plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 4 } },
-  grid: { borderColor: 'rgba(255, 255, 255, 0.1)' },
-  xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
-  yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000000).toFixed(2) + 'M' } },
-  tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' upokt' } }
+  chart: { type: "bar", height: 350, toolbar: { show: false } },
+  colors: ["#A3E635"],
+  dataLabels: {
+    enabled: true,
+    formatter: (v) => (v / 1000000).toFixed(2) + "M",
+    style: { colors: ["#000"] }
+  },
+  plotOptions: {
+    bar: { horizontal: false, columnWidth: "55%", borderRadius: 4 }
+  },
+  grid: { borderColor: "rgba(255, 255, 255, 0.1)" },
+  xaxis: {
+    categories: [],
+    labels: {
+      style: { colors: "rgb(116, 109, 105)" },
+      rotate: -45,
+      rotateAlways: false
+    }
+  },
+  yaxis: {
+    labels: {
+      style: { colors: "rgb(116, 109, 105)" },
+      formatter: (v) => (v / 1000000).toFixed(2) + "M"
+    }
+  },
+  tooltip: {
+    theme: "dark",
+    y: {
+      formatter: (v) => v.toLocaleString() + " uPOKT"
+    }
+  }
+});
+
+// 🟢 Simulated Data Loader (replace with API)
+const loadTopRewardsData = async () => {
+  try {
+    loadingTopRewards.value = true;
+    await new Promise((r) => setTimeout(r, 1000)); // simulate API delay
+
+    const mockCategories = [ ];
+
+    const mockData = [ ];
+
+    topServicesChartOptions.value.xaxis.categories = mockCategories;
+    topServicesChartSeries.value = [{ name: "Rewards (uPOKT)", data: mockData }];
+  } finally {
+    loadingTopRewards.value = false;
+  }
+};
+
+onMounted(() => {
+  loadTopRewardsData();
 });
 
 
@@ -347,7 +405,7 @@ onMounted(() => {
 
     <!-- Top 10 Services by Rewards (Most Recent Hour) -->
     <div v-if="topServicesData.length > 0" class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100 mb-5">
-      <div class="flex items-center justify-between mb-4 ml-5 mr-5">
+      <!-- <div class="flex items-center justify-between mb-4 ml-5 mr-5">
         <div class="text-lg font-semibold text-main">Top 10 Services by Rewards (Last Hour)</div>
         <span v-if="latestHourBucketTime" class="text-xs text-secondary bg-base-200 dark:bg-base-300 px-3 py-1 rounded-full">
           {{ new Date(latestHourBucketTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
@@ -357,7 +415,101 @@ onMounted(() => {
         <div class="h-96">
           <ApexCharts type="bar" height="350" :options="topServicesChartOptions" :series="topServicesChartSeries" />
         </div>
+      </div> -->
+
+      <div class="flex items-center justify-between mb-4 ml-5 mr-5">
+      <div class="text-lg font-semibold text-main">
+        Top 10 Services by Rewards (Last Hour)
       </div>
+      <span
+        v-if="latestHourBucketTime"
+        class="text-xs text-secondary bg-base-200 dark:bg-base-300 px-3 py-1 rounded-full"
+      >
+        {{
+          new Date(latestHourBucketTime).toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+          })
+        }}
+      </span>
+    </div>
+
+    <!-- Chart Section -->
+    <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md relative">
+      <!-- Loading -->
+      <div
+        v-if="loadingTopRewards"
+        class="flex justify-center items-center h-96"
+      >
+        <div class="loading loading-spinner loading-lg"></div>
+        <span class="ml-2 text-secondary">Loading chart data...</span>
+      </div>
+
+      <!-- No Data -->
+      <div
+        v-else-if="topServicesChartSeries[0].data.length === 0"
+        class="flex justify-center items-center h-96 text-gray-500"
+      >
+        No services data found
+      </div>
+
+      <!-- Chart -->
+      <div v-else class="h-98 relative pb-10">
+        <ApexCharts
+          :key="topRewardsChartType"
+          :type="topRewardsChartType"
+          height="350"
+          :options="topServicesChartOptions"
+          :series="topServicesChartSeries"
+        />
+
+        <!-- Buttons -->
+        <div
+          class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300 mt-4"
+        >
+          <button
+            @click="topRewardsChartType = 'bar'"
+            :class="[
+              'tab',
+              topRewardsChartType === 'bar'
+                ? 'tab-active bg-[#09279F] text-white'
+                : ''
+            ]"
+            title="Bar Chart"
+          >
+            <Icon icon="mdi:chart-bar" class="text-sm" />
+          </button>
+
+          <button
+            @click="topRewardsChartType = 'area'"
+            :class="[
+              'tab',
+              topRewardsChartType === 'area'
+                ? 'tab-active bg-[#09279F] text-white'
+                : ''
+            ]"
+            title="Area Chart"
+          >
+            <Icon icon="mdi:chart-areaspline" class="text-sm" />
+          </button>
+
+          <button
+            @click="topRewardsChartType = 'line'"
+            :class="[
+              'tab',
+              topRewardsChartType === 'line'
+                ? 'tab-active bg-[#09279F] text-white'
+                : ''
+            ]"
+            title="Line Chart"
+          >
+            <Icon icon="mdi:chart-line" class="text-sm" />
+          </button>
+        </div>
+      </div>
+    </div>
       
       <!-- Service Details Table -->
       <div class="bg-[#EFF2F5] dark:bg-base-100 px-0.5 pt-0.5 pb-4 rounded-xl shadow-md mb-4">

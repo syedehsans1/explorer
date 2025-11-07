@@ -159,17 +159,47 @@ const relaysChartOptions = ref({
   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' relays' } }
 });
 
+
+const topServicesChartType = ref("bar");
+
+
 const topServicesChartSeries = ref([{ name: 'Compute Units', data: [] as number[] }]);
+// const topServicesChartOptions = ref({
+//   chart: { type: 'bar', height: 350, toolbar: { show: false } },
+//   colors: ['#A3E635'],
+//   dataLabels: { enabled: true, formatter: (v: number) => (v / 1000000000).toFixed(2) + 'B', style: { colors: ['#000'] } },
+//   plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 4 } },
+//   grid: { borderColor: 'rgba(255, 255, 255, 0.1)' },
+//   xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
+//   yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000000000).toFixed(2) + 'B' } },
+//   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' compute units' } }
+// });
+
 const topServicesChartOptions = ref({
-  chart: { type: 'bar', height: 350, toolbar: { show: false } },
-  colors: ['#A3E635'],
-  dataLabels: { enabled: true, formatter: (v: number) => (v / 1000000000).toFixed(2) + 'B', style: { colors: ['#000'] } },
-  plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 4 } },
-  grid: { borderColor: 'rgba(255, 255, 255, 0.1)' },
-  xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
-  yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000000000).toFixed(2) + 'B' } },
-  tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' compute units' } }
+  chart: { type: "bar", height: 350, toolbar: { show: false } },
+  colors: ["#A3E635"], dataLabels: { enabled: true, formatter: (v) => (v / 1000000000).toFixed(2) + "B", style: { colors: ["#000"] }},
+  plotOptions: { bar: { horizontal: false, columnWidth: "55%", borderRadius: 4 }},
+  grid: { borderColor: "rgba(255, 255, 255, 0.1)" },
+  xaxis: { categories: [], labels: { style: { colors: "rgb(116, 109, 105)" }, rotate: -45, rotateAlways: false }},
+  yaxis: { labels: { style: { colors: "rgb(116, 109, 105)" }, formatter: (v) => (v / 1000000000).toFixed(2) + "B" }},
+  tooltip: { theme: "dark", y: { formatter: (v) => v.toLocaleString() + " compute units" }}
 });
+
+// ✅ Example data loader (replace with API)
+const loadTopServicesData = async () => {
+  try {
+    loadingTopServices.value = true;
+    await new Promise((r) => setTimeout(r, 1000)); // simulate API delay
+
+    const mockCategories = ["Service A", "Service B", "Service C", "Service D", "Service E"];
+    const mockData = [5000000000, 3200000000, 2800000000, 1500000000, 800000000];
+
+    topServicesChartOptions.value.xaxis.categories = mockCategories;
+    topServicesChartSeries.value = [{ name: "Compute Units", data: mockData }];
+  } finally {
+    loadingTopServices.value = false;
+  }
+};
 
 async function loadSummaryStats() {
   try {
@@ -332,6 +362,7 @@ onMounted(() => {
   loadProofSubmissions();
   loadTopServicesByComputeUnits();
   loadTopServicesByPerformance();
+  loadTopServicesData();
 });
 </script>
 
@@ -473,7 +504,41 @@ onMounted(() => {
           </select>
         </div>
       </div>
-      <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md">
+
+      <!-- Top Services by Compute Unite with buttons -->
+      <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md relative">
+        <!-- ✅ Loading state -->
+        <div v-if="loadingTopServices" class="flex justify-center items-center h-96">
+          <div class="loading loading-spinner loading-lg"></div>
+          <span class="ml-2 text-secondary">Loading services data...</span>
+        </div>
+
+        <!-- ✅ No data -->
+        <div v-else-if="topServicesChartSeries[0].data.length === 0" class="flex justify-center items-center h-96 text-gray-500">
+          No services data found
+        </div>
+
+        <!-- ✅ Chart -->
+        <div v-else class="h-98 relative pb-10">
+          <ApexCharts :key="topServicesChartType" :type="topServicesChartType" height="350" :options="topServicesChartOptions" :series="topServicesChartSeries"/>
+
+          <!-- ✅ Chart type switcher -->
+          <div class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300 mt-4">
+            <button @click="topServicesChartType = 'bar'" :class="[ 'tab', topServicesChartType === 'bar' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Bar Chart">
+              <Icon icon="mdi:chart-bar" class="text-sm" />
+            </button>
+
+            <button @click="topServicesChartType = 'area'" :class="[ 'tab', topServicesChartType === 'area' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Area Chart">
+              <Icon icon="mdi:chart-areaspline" class="text-sm" />
+            </button>
+
+            <button @click="topServicesChartType = 'line'" :class="['tab', topServicesChartType === 'line' ? 'tab-active bg-[#09279F] text-white' : '' ]" title="Line Chart">
+              <Icon icon="mdi:chart-line" class="text-sm" />
+            </button>
+          </div>
+        </div>
+      </div>
+      <!-- <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md">
         <div v-if="loadingTopServices" class="flex justify-center items-center h-96">
           <div class="loading loading-spinner loading-lg"></div>
           <span class="ml-2">Loading services data...</span>
@@ -484,7 +549,7 @@ onMounted(() => {
         <div v-else class="h-96">
           <ApexCharts type="bar" height="350" :options="topServicesChartOptions" :series="topServicesChartSeries" />
         </div>
-      </div>
+      </div> -->
     </div>
 
     <div class="dark:bg-base-100 bg-base-200 pt-3 rounded-lg border-[3px] border-solid border-base-200 dark:border-base-100 mb-5">
