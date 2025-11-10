@@ -80,8 +80,6 @@ async function loadAll(address: string) {
 
 onMounted(() => {
   loadAll(props.address);
-  loadRewardsData();
-  loadRelaysData();;
 });
 
 onUnmounted(() => {
@@ -310,115 +308,39 @@ const isRelaysLoading = ref(true);
 const rewardsChartSeries = ref([{ name: 'Total Rewards', data: [] as number[] }]);
 const relaysChartSeries = ref([{ name: 'Total Relays', data: [] as number[] }]);
 
-
-// const rewardsChartOptions = ref({
-//   chart: { type: 'area', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
-//   colors: ['#A3E635'],
-//   dataLabels: { enabled: false },
-//   stroke: { curve: 'smooth', width: 2 },
-//   fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] } },
-//   grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
-//   markers: { size: 0 },
-//   xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
-//   yaxis: { 
-//     labels: { 
-//       style: { colors: 'rgb(116, 109, 105)' }, 
-//       formatter: (v: number) => {
-//         if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
-//         if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
-//         return v.toFixed(2);
-//       }
-//     } 
-//   },
-//   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' POKT' } }
-// });
-
 const rewardsChartOptions = ref({
-  chart: { type: chartType.value, height: 280, toolbar: { show: false }, zoom: { enabled: false }},
-  colors: ["#A3E635"], dataLabels: { enabled: false }, stroke: { curve: "smooth", width: 2 },
-  fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] }},
-  grid: { borderColor: "rgba(255, 255, 255, 0.1)", row: { colors: ["transparent"], opacity: 0.5 }},
+  chart: { type: chartType.value, height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+  colors: ['#A3E635'],
+  dataLabels: { enabled: false },
+  stroke: { curve: 'smooth', width: 2 },
+  fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.3, stops: [0, 90, 100] } },
+  grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
   markers: { size: 0 },
-  xaxis: { categories: [], labels: { style: { colors: "rgb(116, 109, 105)" }, rotate: -45, rotateAlways: false }},
-  yaxis: { labels: { style: { colors: "rgb(116, 109, 105)" }, formatter: (v) => { 
-    if (v >= 1000000) return (v / 1000000).toFixed(1) + "M"; 
-    if (v >= 1000) return (v / 1000).toFixed(1) + "K"; return v.toFixed(2); 
-  }}},
-  tooltip: { theme: "dark", y: { formatter: (v) => v.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " POKT" }}
+  xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
+  yaxis: { 
+    labels: { 
+      style: { colors: 'rgb(116, 109, 105)' }, 
+      formatter: (v: number) => {
+        if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+        if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
+        return v.toFixed(2);
+      }
+    } 
+  },
+  tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' POKT' } }
 });
-
-// ✅ Generate mock data for last 30 days
-const loadRewardsData = async () => {
-  try {
-    isLoading.value = true;
-    await new Promise((r) => setTimeout(r, 1000)); // simulate backend delay
-
-    const mockDates = [];
-    const mockValues = [];
-
-    const today = new Date();
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      mockDates.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-      // random reward value for demo
-      mockValues.push(Math.floor(Math.random() * 10000) + 500);
-    }
-
-    rewardsChartOptions.value.xaxis.categories = mockDates;
-    rewardsChartSeries.value = [{ name: "Total Rewards", data: mockValues }];
-  } finally {
-    isLoading.value = false;
-  }
-};
 
 const relaysChartOptions = ref({
-  chart: { type: "line", height: 280, toolbar: { show: false }, zoom: { enabled: false }},
-  colors: ["#5E9AE4"], dataLabels: { enabled: false }, stroke: { curve: "smooth", width: 2 },
-  grid: { borderColor: "rgba(255, 255, 255, 0.1)", row: { colors: ["transparent"], opacity: 0.5 }},
+  chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
+  colors: ['#5E9AE4'],
+  dataLabels: { enabled: false },
+  stroke: { curve: 'smooth', width: 2 },
+  grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
   markers: { size: 0 },
-  xaxis: { categories: [], labels: { style: { colors: "rgb(116, 109, 105)" }, rotate: -45, rotateAlways: false}},
-  yaxis: { labels: { style: { colors: "rgb(116, 109, 105)" }, formatter: (v) => (v / 1000).toFixed(0) + "K" }},
-  tooltip: { theme: "dark", y: { formatter: (v) => v.toLocaleString() + " relays" }}
+  xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
+  yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000).toFixed(0) + 'K' } },
+  tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' relays' } }
 });
-
-// ✅ Simulated 30 days data
-const loadRelaysData = async () => {
-  try {
-    isRelaysLoading.value = true;
-    await new Promise((r) => setTimeout(r, 1000)); // simulate delay
-
-    const mockDates = [];
-    const mockValues = [];
-    const today = new Date();
-
-    for (let i = 29; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      mockDates.push(
-        d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-      );
-      mockValues.push(Math.floor(Math.random() * 900000) + 100000); // random relay data
-    }
-
-    relaysChartOptions.value.xaxis.categories = mockDates;
-    relaysChartSeries.value = [{ name: "Total Relays", data: mockValues }];
-  } finally {
-    isRelaysLoading.value = false;
-  }
-};
-
-// const relaysChartOptions = ref({
-//   chart: { type: 'line', height: 280, toolbar: { show: false }, zoom: { enabled: false } },
-//   colors: ['#5E9AE4'],
-//   dataLabels: { enabled: false },
-//   stroke: { curve: 'smooth', width: 2 },
-//   grid: { borderColor: 'rgba(255, 255, 255, 0.1)', row: { colors: ['transparent'], opacity: 0.5 } },
-//   markers: { size: 0 },
-//   xaxis: { categories: [] as string[], labels: { style: { colors: 'rgb(116, 109, 105)' }, rotate: -45, rotateAlways: false } },
-//   yaxis: { labels: { style: { colors: 'rgb(116, 109, 105)' }, formatter: (v: number) => (v / 1000).toFixed(0) + 'K' } },
-//   tooltip: { theme: 'dark', y: { formatter: (v: number) => v.toLocaleString() + ' relays' } }
-// });
 
 
 // Summary metrics
@@ -459,18 +381,13 @@ function updateCharts() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   });
 
+  rewardsChartOptions.value.xaxis = { ...rewardsChartOptions.value.xaxis, categories: labels };
   rewardsChartSeries.value = [{ name: 'Total Rewards (POKT)', data: sorted.map(d => d.total_rewards_upokt / 1000000) }];
+  isLoading.value = false
+
+  relaysChartOptions.value.xaxis = { ...relaysChartOptions.value.xaxis, categories: labels };
   relaysChartSeries.value = [{ name: 'Total Relays', data: sorted.map(d => d.total_relays) }];
-
-  rewardsChartOptions.value.xaxis = {
-    ...rewardsChartOptions.value.xaxis,
-    categories: labels
-  };
-
-  relaysChartOptions.value.xaxis = {
-    ...relaysChartOptions.value.xaxis,
-    categories: labels
-  };
+  isRelaysLoading.value = false
 }
 
 function formatNumber(num: number | string): string {
