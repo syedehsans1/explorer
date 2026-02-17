@@ -215,6 +215,11 @@ const blocksFallbackError = ref('');
 const isTxsNodeFallback = ref(false);
 const txsFallbackError = ref('');
 
+// ✅ Dashboard transactions auto-prepend tracking
+const lastKnownTxHashDashboard = ref<string>('')
+const lastKnownTxBlockDashboard = ref<number>(0)
+const isPrependingTxsDashboard = ref(false)
+
 // Indexer health status
 interface ChainStatus {
   chain: string;
@@ -375,6 +380,83 @@ async function prependNewBlockDashboard(height: number) {
   }
 }
 
+// ✅ Dashboard: server se latest txs fetch karo (prepend ke liye)
+async function fetchLatestTxsDashboard(limit = 10): Promise<any[]> {
+  try {
+    const chainVal = getApiChainName(blockchain.current?.chainName || props.chain || 'pocket-lego-testnet')
+    const url = `/api/v1/transactions?chain=${chainVal}&page=1&limit=${limit}&sort_by=timestamp&sort_order=desc`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.data || []
+  } catch {
+    return []
+  }
+}
+
+// ✅ Dashboard transactions - local ref (base.allTxs direct mutate safe nahi hota)
+const dashboardTxs = ref<any[]>([])
+const dashboardTxsInitialized = ref(false)
+
+// ✅ base.allTxs load hone par dashboardTxs initialize karo
+watch(() => base.allTxs, (newTxs) => {
+  if (newTxs && newTxs.length > 0 && !dashboardTxsInitialized.value) {
+    dashboardTxs.value = [...newTxs]
+    dashboardTxsInitialized.value = true
+    lastKnownTxHashDashboard.value = newTxs[0]?.hash || ''
+    lastKnownTxBlockDashboard.value = Math.max(...newTxs.map((tx: any) => Number(tx.block_height || 0)))
+  }
+}, { immediate: true, deep: false })
+
+// ✅ Dashboard: naye transactions table ke upar prepend karo
+async function prependNewTxsDashboard() {
+  if (isPrependingTxsDashboard.value) return
+  if (isTxsNodeFallback.value) return
+  
+  // dashboardTxs initialize na hua ho toh base.allTxs se karo
+  if (dashboardTxs.value.length === 0) {
+    if (base.allTxs && base.allTxs.length > 0) {
+      dashboardTxs.value = [...base.allTxs]
+      dashboardTxsInitialized.value = true
+    } else {
+      return
+    }
+  }
+
+  isPrependingTxsDashboard.value = true
+
+  try {
+    const latestTxs = await fetchLatestTxsDashboard(10)
+    if (!latestTxs.length) return
+
+    // Existing hashes ka set banao
+    const existingHashes = new Set(dashboardTxs.value.map((tx: any) => tx.hash))
+
+    // Naye transactions filter karo
+    const newTxs = latestTxs.filter((tx: any) => !existingHashes.has(tx.hash))
+    if (newTxs.length === 0) return
+
+    // ✅ Local ref mein prepend karo - Vue reactivity perfectly kaam karti hai
+    dashboardTxs.value = [...newTxs, ...dashboardTxs.value]
+
+    // lastKnown update karo
+    lastKnownTxHashDashboard.value = dashboardTxs.value[0]?.hash || ''
+
+    // ✅ visibleTxs bhi force update karo
+    await new Promise(resolve => setTimeout(resolve, 30))
+    if (txTableContainer.value && dashboardTxs.value.length > 0) {
+      const container = txTableContainer.value
+      const viewportRows = Math.ceil(container.clientHeight / itemHeight) + 5
+      visibleTxs.value = dashboardTxs.value.slice(0, viewportRows).map((item: any, index: number) => ({
+        item,
+        index
+      }))
+    }
+  } finally {
+    isPrependingTxsDashboard.value = false
+  }
+}
+
 // ✅ Watch currentBlockHeight - jab naya block aaye sirf woh prepend karo
 watch(currentBlockHeight, async (newHeight, oldHeight) => {
   const newH = Number(newHeight)
@@ -391,6 +473,21 @@ watch(currentBlockHeight, async (newHeight, oldHeight) => {
   lastKnownHeightDashboard.value = newH
 
   await prependNewBlockDashboard(newH)
+})
+
+// ✅ Watch currentBlockHeight - jab naya block aaye toh dashboard transactions bhi prepend karo
+watch(currentBlockHeight, async (newHeight, oldHeight) => {
+  const newH = Number(newHeight)
+  const oldH = Number(oldHeight)
+
+  if (newH <= oldH) return
+  if (!base.allTxs || base.allTxs.length === 0) return
+  if (isTxsNodeFallback.value) return
+  if (newH <= lastKnownTxBlockDashboard.value) return
+
+  lastKnownTxBlockDashboard.value = newH
+
+  await prependNewTxsDashboard()
 })
 
 // 🔹 Node se blocks fetch karo (Dashboard fallback)
@@ -648,18 +745,20 @@ function updateVisibleBlocks() {
 }
 
 function updateVisibleTxs() {
-  if (!txTableContainer.value || !base.allTxs?.length) return;
+  // ✅ dashboardTxs use karo agar initialized ho, warna base.allTxs fallback
+  const txSource = dashboardTxs.value.length > 0 ? dashboardTxs.value : (base.allTxs || [])
+  if (!txTableContainer.value || !txSource.length) return;
   const container = txTableContainer.value;
   const scrollTop = container.scrollTop;
   const viewportHeight = container.clientHeight;
   const startIndex = Math.floor(scrollTop / itemHeight) - bufferSize;
   const endIndex = Math.ceil((scrollTop + viewportHeight) / itemHeight) + bufferSize;
   const start = Math.max(0, startIndex);
-  const end = Math.min(base.allTxs.length, endIndex);
+  const end = Math.min(txSource.length, endIndex);
   if (visibleTxs.value.length === 0 ||
     Math.abs(visibleTxs.value[0]?.index - start) >= 2 ||
     Math.abs(visibleTxs.value[visibleTxs.value.length - 1]?.index - (end - 1)) >= 2) {
-    visibleTxs.value = base.allTxs.slice(start, end).map((item, index) => ({
+    visibleTxs.value = txSource.slice(start, end).map((item, index) => ({
       item,
       index: start + index
     }));
@@ -691,7 +790,18 @@ onMounted(async () => {
     txsFallbackError.value = '';
   }
 
-  base.getAllTxs(apiChainNameVal).catch(err => {
+  base.getAllTxs(apiChainNameVal).then(() => {
+    // ✅ Transactions load hone ke baad lastKnownBlock set karo
+    if (base.allTxs && base.allTxs.length > 0) {
+      lastKnownTxBlockDashboard.value = Math.max(...base.allTxs.map((tx: any) => Number(tx.block_height || 0)))
+      lastKnownTxHashDashboard.value = base.allTxs[0]?.hash || ''
+    }
+    // currentBlockHeight se bhi set karo agar already badh gaya ho
+    const currentH = Number(currentBlockHeight.value)
+    if (currentH > lastKnownTxBlockDashboard.value) {
+      lastKnownTxBlockDashboard.value = currentH
+    }
+  }).catch(err => {
     console.error('[Home Page] Error loading transactions:', err);
     txsFallbackError.value = err.message || 'Failed to load transactions';
   });
@@ -1991,7 +2101,6 @@ function formatBlockTime(secondsStr?: string | number) {
       <div class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-5 rounded-lg shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center">
-            <!-- <Icon icon="mdi:file-document-outline" class="text-2xl text-black mr-2" /> -->
             <div class="text-lg font-semibold text-main ml-5">{{ $t('module.rtx') }}</div>
           </div>
           <RouterLink :to="`/${chain}/tx`"
@@ -2029,45 +2138,44 @@ function formatBlockTime(secondsStr?: string | number) {
                 <th class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200">{{ $t('account.time') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <!-- Add spacer at the top to push visible content -->
-              <tr v-if="visibleTxs.length > 0" class="h-0 m-0 p-0 border-none">
-                <td :style="{ height: `${visibleTxs[0].index * itemHeight}px`, padding: 0 }" colspan="6"></td>
-              </tr>
+          <!-- Loading state -->
+          <tbody v-if="dashboardTxs.length === 0 && (!base.allTxs || base.allTxs.length === 0)">
+            <tr>
+              <td colspan="6" class="py-8 text-center text-gray-500">No transactions found</td>
+            </tr>
+          </tbody>
 
-              <!-- Render only visible transactions -->
-              <tr v-for="item in visibleTxs" :key="item.index"
-                class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
-                <td class="truncate text-[#153cd8]" style="max-width:10rem">
-                  <RouterLink class="truncate hover:underline" :to="`/${props.chain}/tx/${item.item.hash}`">{{ item.item.hash }}</RouterLink>
-                </td>
-                <td class="text-sm text-[#153cd8]">
-                  <RouterLink :to="`/${props.chain}/blocks/${item.item.block_height}`" class="hover:underline">{{ item.item.block_height }}</RouterLink>
-                </td>
-                <td>
-                  <span class="text-xs truncate py-1 px-3 rounded-full"
-                    :class="(isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'bg-[#60BC29]/10 text-[#60BC29]' : 'bg-[#E03834]/10 text-[#E03834]'">
-                    {{ (isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'Success' : 'Failed' }}
-                  </span>
-                </td>
-                <td>{{ item.item.type }}</td>
-                <td>{{ format.formatTokens([{ amount: item.item.fee, denom: 'upokt' }]) }} </td>
-                <td class="text-sm">{{ format.toDay(item.item.timestamp, 'from') }}</td>
-              </tr>
-
-              <!-- Add spacer at the bottom to maintain scroll height -->
-              <tr v-if="visibleTxs.length > 0 && base.allTxs.length > 0" class="h-0 m-0 p-0 border-none">
-                <td
-                  :style="{ height: `${Math.max(0, base.allTxs.length - (visibleTxs[visibleTxs.length - 1].index + 1)) * itemHeight}px`, padding: 0 }"
-                  colspan="6"></td>
-              </tr>
-            </tbody>
+          <!-- ✅ TransitionGroup tag="tbody" - smooth animation -->
+          <TransitionGroup
+            v-else
+            name="tx-slide"
+            tag="tbody"
+          >
+            <tr v-for="item in visibleTxs" :key="item.item.hash || item.index"
+              class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+              <td class="truncate text-[#153cd8]" style="max-width:10rem">
+                <RouterLink class="truncate hover:underline" :to="`/${props.chain}/tx/${item.item.hash}`">{{ item.item.hash }}</RouterLink>
+              </td>
+              <td class="text-sm text-[#153cd8]">
+                <RouterLink :to="`/${props.chain}/blocks/${item.item.block_height}`" class="hover:underline">{{ item.item.block_height }}</RouterLink>
+              </td>
+              <td>
+                <span class="text-xs truncate py-1 px-3 rounded-full"
+                  :class="(isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'bg-[#60BC29]/10 text-[#60BC29]' : 'bg-[#E03834]/10 text-[#E03834]'">
+                  {{ (isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'Success' : 'Failed' }}
+                </span>
+              </td>
+              <td>{{ item.item.type }}</td>
+              <td>{{ format.formatTokens([{ amount: item.item.fee, denom: 'upokt' }]) }}</td>
+              <td class="text-sm">{{ format.toDay(item.item.timestamp, 'from') }}</td>
+            </tr>
+          </TransitionGroup>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- Node Information Section - Only shown if coingeckoId is not available -->
+    <!-- Node Information Section -->
     <div v-if="!store.coingeckoId"
       class="bg-base-100 px-4 pt-3 pb-4 rounded-md shadow-md border-t-4 border-accent mt-5">
       <div class="flex items-center mb-4">
@@ -2159,4 +2267,15 @@ function formatBlockTime(secondsStr?: string | number) {
 .block-slide-move {
   transition: transform 0.4s ease;
 }
+
+/* ✅ Transaction slide animation */
+.tx-slide-enter-active { transition: all 0.4s ease; }
+.tx-slide-enter-from { opacity: 0; transform: translateY(-12px); }
+.tx-slide-enter-to { opacity: 1; transform: translateY(0); }
+
+.tx-slide-leave-active { transition: all 0.3s ease; }
+.tx-slide-leave-from { opacity: 1; }
+.tx-slide-leave-to { opacity: 0; transform: translateY(8px); }
+
+.tx-slide-move { transition: transform 0.4s ease; }
 </style>
