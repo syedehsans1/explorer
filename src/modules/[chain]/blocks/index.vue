@@ -78,9 +78,33 @@ interface ApiBlockItem {
   proposer: string
   chain: string
   transaction_count?: number
-  // size?: number
+  // ✅ Server alag alag field names use kar sakta hai
   block_production_time?: number
+  production_time?: number
+  block_time?: number
   raw_block_size?: number
+  size?: number
+  block_size?: number
+}
+
+// ✅ Helper: kisi bhi field name se production time nikalo
+function getProductionTime(block: ApiBlockItem): number {
+  return Number(
+    block.block_production_time ||
+    block.production_time ||
+    block.block_time ||
+    0
+  )
+}
+
+// ✅ Helper: kisi bhi field name se block size nikalo
+function getBlockSize(block: ApiBlockItem): number {
+  return Number(
+    block.raw_block_size ||
+    block.size ||
+    block.block_size ||
+    0
+  )
 }
 
 const getApiChainName = (chainName: string) => {
@@ -108,20 +132,136 @@ const pageSizeOptions = [10, 25, 50, 100]
 const avgBlockProductionTime = ref<number | null>(null)
 const avgBlockSize = ref<number | null>(null)
 
-function updateCurrentBlockProductionTime() {
-  const height = currentBlockHeight.value
-  // Ensure both values are of the same type for comparison
-  const block = blocks.value.find(b => String(b.height) === String(height))
+// ✅ Track last known block height to detect new blocks
+const lastKnownHeight = ref<number>(0)
+// ✅ Lock: ek waqt mein ek hi prepend chale
+const isPrepending = ref(false)
+
+// ✅ Node se sirf ek naya block fetch karo (primary - fast)
+async function fetchSingleBlockFromNode(height: number): Promise<ApiBlockItem | null> {
+  try {
+    // Current aur previous block dono fetch karo production time ke liye
+    const [block, prevBlock] = await Promise.all([
+      blockchain.rpc.getBaseBlockAt(String(height)).catch(() => null),
+      height > 1 ? blockchain.rpc.getBaseBlockAt(String(height - 1)).catch(() => null) : Promise.resolve(null)
+    ])
+
+    if (!block) return null
+    const blockHeight = parseInt(block.block?.header?.height || '0')
+    if (blockHeight !== height) return null
+
+    // ✅ Production time calculate karo timestamps se
+    const currentTime = new Date(block.block?.header?.time || '').getTime()
+    const prevTime = prevBlock
+      ? new Date(prevBlock.block?.header?.time || '').getTime()
+      : 0
+    const productionTimeSec = (prevTime && currentTime && currentTime > prevTime)
+      ? parseFloat(((currentTime - prevTime) / 1000).toFixed(3))
+      : 0
+
+    return {
+      id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
+      height: blockHeight,
+      hash: block.block_id?.hash || '',
+      timestamp: block.block?.header?.time || new Date().toISOString(),
+      proposer: block.block?.header?.proposer_address || '',
+      chain: block.block?.header?.chain_id || apiChainName.value,
+      transaction_count: block.block?.data?.txs?.length || 0,
+      block_production_time: productionTimeSec,
+      raw_block_size: 0,
+    }
+  } catch {
+    return null
+  }
 }
 
-// ⭐ Watch block list changed
-watch(blocks, () => {
-  updateCurrentBlockProductionTime()
-})
+// ✅ Server se specific height ka block fetch karo
+async function fetchSingleBlockFromServer(height: number): Promise<ApiBlockItem | null> {
+  try {
+    // Height-specific endpoint pehle try karo
+    const url = `/api/v1/blocks/${height}?chain=${apiChainName.value}`
+    const res = await fetch(url)
+    if (!res.ok) {
+      // Fallback: list se dhundho
+      const listUrl = `/api/v1/blocks?chain=${apiChainName.value}&page=1&limit=5`
+      const listRes = await fetch(listUrl)
+      if (!listRes.ok) return null
+      const listText = await listRes.text()
+      if (!listText) return null
+      const listData = JSON.parse(listText)
+      const blockList: ApiBlockItem[] = listData.blocks || listData.data || []
+      return blockList.find((b: ApiBlockItem) => Number(b.height) === height) || null
+    }
+    const text = await res.text()
+    if (!text) return null
+    const data = JSON.parse(text)
+    const block = data.block || data.data || data
+    if (Number(block?.height) !== height) return null
+    return block
+  } catch {
+    return null
+  }
+}
 
-// ⭐ Watch current block height changed
-watch(currentBlockHeight, () => {
-  updateCurrentBlockProductionTime()
+// ✅ Sirf naya block table ke upar prepend karo - poora reload nahi
+async function prependNewBlock(height: number) {
+  // Lock check
+  if (isPrepending.value) return
+  isPrepending.value = true
+
+  try {
+    // Check: kya yeh block already list mein hai?
+    if (blocks.value.some(b => Number(b.height) === height)) return
+
+    // Pehle node se try karo - fast aur accurate
+    let newBlock = await fetchSingleBlockFromNode(height)
+
+    // Agar node se nahi mila toh server se try karo
+    if (!newBlock) {
+      newBlock = await fetchSingleBlockFromServer(height)
+    }
+
+    if (!newBlock) return
+
+    // Height verify karo
+    if (Number(newBlock.height) !== height) return
+
+    // Final duplicate check
+    if (blocks.value.some(b => Number(b.height) === height)) return
+
+    // Table ke upar naya block add karo
+    blocks.value = [newBlock, ...blocks.value]
+
+    // Agar page 1 par hain toh last item remove karo (taake itemsPerPage limit rahay)
+    if (currentPage.value === 1 && blocks.value.length > itemsPerPage.value) {
+      blocks.value = blocks.value.slice(0, itemsPerPage.value)
+    }
+
+    // Total count update karo
+    totalBlocks.value = totalBlocks.value + 1
+    totalPages.value = Math.ceil(totalBlocks.value / itemsPerPage.value)
+  } finally {
+    isPrepending.value = false
+  }
+}
+
+// ✅ Watch currentBlockHeight - jab naya block aaye sirf woh prepend karo
+watch(currentBlockHeight, async (newHeight, oldHeight) => {
+  const newH = Number(newHeight)
+  const oldH = Number(oldHeight)
+
+  // Sirf page 1 par auto-prepend karo
+  if (currentPage.value !== 1) return
+  // Sirf tab karo jab height genuinely badhi ho
+  if (newH <= oldH) return
+  // Sirf tab jab blocks already loaded hain
+  if (blocks.value.length === 0) return
+  // lastKnownHeight check
+  if (newH <= lastKnownHeight.value) return
+
+  // Immediately update karo taake duplicate trigger block ho
+  lastKnownHeight.value = newH
+  await prependNewBlock(newH)
 })
 
 // 🔹 Server se blocks fetch karo
@@ -195,9 +335,8 @@ async function getBlocksFromNode() {
       retries++
     }
 
-const latestBlock = base.latest.block
-const currentHeight = Number(latestBlock.header.height)
-
+    const latestBlock = base.latest.block
+    const currentHeight = Number(latestBlock.header.height)
 
     const endHeight = currentHeight - ((currentPage.value - 1) * itemsPerPage.value)
     const startHeight = Math.max(endHeight - itemsPerPage.value + 1, 1)
@@ -210,12 +349,25 @@ const currentHeight = Number(latestBlock.header.height)
       )
     }
 
-
     const fetchedBlocks = await Promise.all(blockPromises)
-    
-    const nodeBlocks = fetchedBlocks
-      .filter(block => block !== null)
-      .map((block: any) => ({
+
+    const validBlocks = fetchedBlocks.filter(block => block !== null)
+
+    // ✅ Production time calculate karo: current block time - previous block time
+    const nodeBlocks = validBlocks.map((block: any, index: number) => {
+      const currentTime = new Date(block.block?.header?.time || '').getTime()
+      // Next block (index+1) is actually older (lower height) - blocks are desc order
+      const prevBlock = validBlocks[index + 1]
+      const prevTime = prevBlock
+        ? new Date(prevBlock.block?.header?.time || '').getTime()
+        : 0
+
+      // Production time = seconds between this block and previous block
+      const productionTimeSec = (prevTime && currentTime && currentTime > prevTime)
+        ? parseFloat(((currentTime - prevTime) / 1000).toFixed(3))
+        : 0
+
+      return {
         id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
         height: parseInt(block.block?.header?.height || '0'),
         hash: block.block_id?.hash || '',
@@ -223,10 +375,11 @@ const currentHeight = Number(latestBlock.header.height)
         proposer: block.block?.header?.proposer_address || '',
         chain: block.block?.header?.chain_id || apiChainName.value,
         transaction_count: block.block?.data?.txs?.length || 0,
-        block_production_time: 0,
+        block_production_time: productionTimeSec,
         raw_block_size: 0,
         size: 0
-      }))
+      }
+    })
 
     return {
       blocks: nodeBlocks,
@@ -255,11 +408,72 @@ async function loadBlocks() {
   try {
     const serverData = await getBlocksFromServer()
 
-    blocks.value = serverData.blocks || serverData
-    totalBlocks.value = serverData.total || 0
-    totalPages.value = serverData.totalPages || 0
-    avgBlockProductionTime.value = serverData.avgBlockProductionTime || null
-    avgBlockSize.value = serverData.avgBlockSize || null
+    // ✅ Server response ke multiple possible formats handle karo
+    // Format 1: { data: [...], meta: { total, totalPages, avgBlockProductionTime, avgBlockSize } }
+    // Format 2: { blocks: [...], total, totalPages }
+    // Format 3: [...] (direct array)
+    if (Array.isArray(serverData)) {
+      blocks.value = serverData
+      totalBlocks.value = serverData.length
+      totalPages.value = 1
+    } else if (serverData.data && Array.isArray(serverData.data)) {
+      // ✅ Field names normalize karo - server ke alag formats handle karo
+      // DEBUG: pehle block ka structure console mein dekho
+      if (serverData.data.length > 0) {
+        console.log('[BlocksView Debug] First block from server:', JSON.stringify(serverData.data[0], null, 2))
+      }
+      
+      blocks.value = serverData.data.map((b: any) => ({
+        ...b,
+        // ✅ Production time - string ya number dono rakh lo (formatBlockTime parseFloat karega)
+        block_production_time: (
+          b.block_production_time ??
+          b.production_time ??
+          b.block_time ??
+          b.blockTime ??
+          b.avg_block_time ??
+          b.time_diff ??
+          b.timeDiff ??
+          b.duration ??
+          0
+        ),
+        // ✅ Block size - tamam possible field names
+        raw_block_size: Number(
+          b.raw_block_size ??
+          b.block_size ??
+          b.blockSize ??
+          b.size ??
+          0
+        ),
+        // ✅ Transaction count - tamam possible field names
+        transaction_count: Number(
+          b.transaction_count ??
+          b.tx_count ??
+          b.txCount ??
+          b.num_txs ??
+          b.txs ??
+          0
+        ),
+      }))
+      totalBlocks.value = serverData.meta?.total || serverData.total || 0
+      totalPages.value = serverData.meta?.totalPages || serverData.totalPages || 0
+      avgBlockProductionTime.value = serverData.meta?.avgBlockProductionTime != null
+        ? Number(serverData.meta.avgBlockProductionTime)
+        : null
+      avgBlockSize.value = serverData.meta?.avgBlockSize != null
+        ? Number(serverData.meta.avgBlockSize)
+        : null
+    } else if (serverData.blocks && Array.isArray(serverData.blocks)) {
+      blocks.value = serverData.blocks
+      totalBlocks.value = serverData.total || 0
+      totalPages.value = serverData.totalPages || 0
+      avgBlockProductionTime.value = serverData.avgBlockProductionTime || null
+      avgBlockSize.value = serverData.avgBlockSize || null
+    } else {
+      blocks.value = []
+      totalBlocks.value = 0
+      totalPages.value = 0
+    }
 
     isNodeFallback.value = false
 
@@ -289,15 +503,30 @@ async function loadBlocks() {
     }
   }
 
+  // ✅ Load hone ke baad lastKnownHeight set karo
+  if (blocks.value.length > 0) {
+    lastKnownHeight.value = Math.max(...blocks.value.map(b => Number(b.height)))
+  }
+
   loading.value = false
+
+  // ✅ Race condition fix: agar loadBlocks ke doran currentBlockHeight badh gaya
+  // toh woh blocks miss ho jaate hain - sirf page 1 par check karo
+  if (currentPage.value === 1 && blocks.value.length > 0) {
+    const currentH = Number(currentBlockHeight.value)
+    if (currentH > lastKnownHeight.value) {
+      const missedCount = Math.min(currentH - lastKnownHeight.value, 5)
+      for (let h = lastKnownHeight.value + 1; h <= lastKnownHeight.value + missedCount; h++) {
+        await prependNewBlock(h)
+      }
+    }
+  }
 }
-
-
 
 // Watchers
 watch(itemsPerPage, () => { currentPage.value = 1; loadBlocks() })
 watch(currentPage, () => loadBlocks())
-watch(apiChainName, (n, o) => { if(n!==o){ currentPage.value=1; loadBlocks() } })
+watch(apiChainName, (n, o) => { if (n !== o) { currentPage.value = 1; loadBlocks() } })
 
 // Convert bytes → largest appropriate unit (B, KB, MB, GB, TB, PB)
 function formatBytes(bytes?: number): string {
@@ -326,17 +555,6 @@ function formatProductionTime(secondsStr?: string | number) {
   const seconds = Math.round(totalSeconds % 60)  // remaining seconds
   return `${minutes}m ${seconds}s`  // 60s ya us se upar ko minutes + seconds format me
 }
-
-// ✅ Compute average production time of all loaded blocks
-const averageBlockProductionTime = computed(() => {
-  if (!blocks.value.length) return "0s"
-  const total = blocks.value.reduce((sum, block) => {
-    const time = block.block_production_time ? parseFloat(block.block_production_time as any) : 0
-    return sum + time
-  }, 0)
-  const avgSeconds = total / blocks.value.length
-  return formatProductionTime(avgSeconds) // yaha pe same function use ho raha hai
-})
 
 // Convert seconds → "Xs" or "Xm Ys" without decimal in seconds
 function formatBlockTime(secondsStr?: string | number) {
@@ -435,22 +653,35 @@ onMounted(() => {
             </tr>
           </thead>
 
-          <tbody class="bg-base-100 relative">
-            <tr v-if="loading">
-              <td colspan="11" class="py-8">
+          <!-- Loading state -->
+          <tbody v-if="loading" class="bg-base-100">
+            <tr>
+              <td colspan="10" class="py-8">
                 <div class="flex justify-center items-center">
                   <div class="loading loading-spinner loading-md"></div>
                   <span class="ml-2">Loading blocks...</span>
                 </div>
               </td>
             </tr>
-            <tr v-else-if="!loading && blocks.length === 0">
-              <td colspan="11" class="py-8 text-center text-gray-500">No blocks found</td>
+          </tbody>
+
+          <!-- Empty state -->
+          <tbody v-else-if="blocks.length === 0" class="bg-base-100">
+            <tr>
+              <td colspan="10" class="py-8 text-center text-gray-500">No blocks found</td>
             </tr>
+          </tbody>
+
+          <!-- ✅ TransitionGroup tag="tbody" - sahi HTML structure -->
+          <TransitionGroup
+            v-else
+            name="block-slide"
+            tag="tbody"
+            class="bg-base-100"
+          >
             <tr
-              v-else
               v-for="block in blocks"
-              :key="block.id"
+              :key="block.height"
               class="hover:bg-gray-100 dark:hover:bg-[rgba(255,255,255,0.06)] dark:bg-base-200 bg-white border-0 rounded-xl"
             >
               <td class="font-medium dark:text-warning text-[#09279F]">{{ block.height }}</td>
@@ -474,9 +705,9 @@ onMounted(() => {
               <td>{{ networkStats.suppliers.toLocaleString() }}</td>
               <td>{{ networkStats.gateways.toLocaleString() }}</td>
               <!-- <td>{{ 0 }}</td> -->
-              <td>{{ formatBytes(block.raw_block_size) }}</td>
+              <td>{{ formatBytes(getBlockSize(block)) }}</td>
             </tr>
-          </tbody>
+          </TransitionGroup>
         </table>
 
         <!-- Pagination Bar -->
@@ -494,14 +725,14 @@ onMounted(() => {
               Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalBlocks) }} of {{ totalBlocks }} blocks
             </span>
             <div class="flex items-center gap-1">
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
+              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
                 @click="goToFirst" :disabled="currentPage === 1 || totalPages === 0">First</button>
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
+              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
                 @click="prevPage" :disabled="currentPage === 1 || totalPages === 0">&lt;</button>
               <span class="text-xs px-2">Page {{ currentPage }} of {{ totalPages }}</span>
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
+              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
                 @click="nextPage" :disabled="currentPage === totalPages || totalPages === 0">&gt;</button>
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
+              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
                 @click="goToLast" :disabled="currentPage === totalPages || totalPages === 0">Last</button>
             </div>
           </div>
@@ -536,5 +767,35 @@ onMounted(() => {
 .page-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ✅ Naye block ka smooth slide-down animation */
+.block-slide-enter-active {
+  transition: all 0.4s ease;
+}
+.block-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+.block-slide-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ✅ Purane block ka smooth fade out (jab last row remove ho) */
+.block-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.block-slide-leave-from {
+  opacity: 1;
+}
+.block-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* ✅ Baaki rows ka smooth move jab naya block aaye */
+.block-slide-move {
+  transition: transform 0.4s ease;
 }
 </style>
