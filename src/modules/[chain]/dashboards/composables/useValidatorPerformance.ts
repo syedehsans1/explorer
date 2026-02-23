@@ -135,32 +135,17 @@ export function useDomains(limit = 100, chain?: string) {
   return { loading, error, data, load };
 }
 
-export interface ValidatorSearchResult {
-  type: 'validator';
-  validator_account_address: string;
-  moniker?: string;
-  operator_address?: string;
+export interface SupplierSearchResponse {
+  owner_addresses: string[];              // Unique owner addresses (pokt1...)
+  supplier_operator_addresses: string[]; // Unique supplier operator addresses (poktvaloper1...)
 }
 
-export interface ServiceSearchResult {
-  type: 'service';
-  service_id: string;
-  json_rpc_url: string;
-  supplier_operator_addresses: string[];
-  supplier_count: number;
-}
-
-export interface ValidatorServiceSearchResponse {
-  validators: ValidatorSearchResult[];
-  services: ServiceSearchResult[];
-}
-
-export function useValidatorServiceSearch(chain?: string, limit: number = 20) {
+export function useSupplierServiceSearch(chain?: string, limit: number = 20, status: string = 'staked') {
   const loading = ref(false);
   const error = ref<string | null>(null);
-  const results = ref<ValidatorServiceSearchResponse | null>(null);
+  const results = ref<SupplierSearchResponse | null>(null);
 
-  const search = async (query: string) => {
+  const search = async (query: string, searchStatus?: string) => {
     if (!query || query.trim().length === 0) {
       results.value = null;
       return;
@@ -177,7 +162,12 @@ export function useValidatorServiceSearch(chain?: string, limit: number = 20) {
       if (chain) {
         params.append('chain', chain);
       }
-      const url = `/api/v1/validators/search?${params.toString()}`;
+      // Use provided status or default to the composable's status
+      const statusToUse = searchStatus || status;
+      if (statusToUse) {
+        params.append('status', statusToUse);
+      }
+      const url = `/api/v1/suppliers/search?${params.toString()}`;
       results.value = await fetchJson(url);
     } catch (e: any) {
       error.value = e?.message || 'Failed to search';

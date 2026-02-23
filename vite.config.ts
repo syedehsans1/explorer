@@ -9,6 +9,7 @@ import Pages from 'vite-plugin-pages';
 import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite';
 import type { Plugin } from 'vite';
 
+
 // Security patterns to block
 const SUSPICIOUS_PATTERNS = [
   'eval-stdin.php',
@@ -21,6 +22,7 @@ const SUSPICIOUS_PATTERNS = [
   'phpMyAdmin',
   'invokefunction',
   '../',
+  '/@fs/',
   '..%2f',
   '%2e%2e%2f', // URL encoded ../
 ];
@@ -125,9 +127,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://pocket_indexer_api:3006',
+        target: 'http://exp02-nyc.us.stakenodes.org:3006',
+        // target: 'http://pocket_indexer_api:3006',
+        // target: 'http://104.192.2.82:3006',
         // target: 'http://127.0.0.1:3005',
         // target: 'https://explorer.pocket.network',
+        // target: 'http://192.168.1.17:3006',
         changeOrigin: true,
       },
     },

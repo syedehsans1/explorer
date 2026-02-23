@@ -1,11 +1,22 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
 import { select } from './index';
+import { useFormatter } from '@/stores';
 
 const props = defineProps(['value']);
+const format = useFormatter();
 
 function formatKey(key: string | number) {
   return String(key).replaceAll('_', ' ');
+}
+
+function getFormattedValue(k: string, v: any) {
+  // Convert proposer_address (consensus pubkey hash) to validator moniker
+  if (String(k) === 'proposer_address' && typeof v === 'string') {
+    const validatorName = format.validator(v);
+    return validatorName || v;
+  }
+  return v;
 }
 </script>
 
@@ -26,7 +37,7 @@ function formatKey(key: string | number) {
               <template v-for="(subVal, subKey) in v" :key="subKey">
                 <div class="flex items-start gap-2">
                   <span class="text-[#64748B] min-w-[100px] font-medium">{{ formatKey(subKey) }}</span>
-                  <span class="text-[#171C1F] dark:text-white break-all">{{ subVal }}</span>
+                  <span class="text-[#171C1F] dark:text-white break-all">{{ getFormattedValue(String(subKey), subVal) }}</span>
                 </div>
               </template>
             </div>
@@ -35,7 +46,7 @@ function formatKey(key: string | number) {
           <Component
             v-else-if="v"
             :is="select(v, 'horizontal')"
-            :value="v"
+            :value="getFormattedValue(String(k), v)"
           />
           <span v-else class="text-gray-400">—</span>
         </div>

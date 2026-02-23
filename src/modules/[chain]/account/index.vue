@@ -63,8 +63,8 @@ function showPubkey(v: any) {
 
 </script>
 <template>
-    <div class=" overflow-x-auto">
-        <table class="table table-compact">
+    <div class=" overflow-x-auto mt-[6rem]">
+        <table class="table table-compact mt-[2rem]">
             <thead>
                 <tr>
                     <td>{{ $t('account.type') }}</td>

@@ -18,6 +18,7 @@ export interface TransactionFilters {
   limit?: number;
   sort_by?: 'timestamp' | 'amount' | 'fee' | 'block_height' | 'type' | 'status';
   sort_order?: 'asc' | 'desc';
+  supplier_status?: string;
 }
 
 export interface ApiTransaction {
@@ -30,7 +31,7 @@ export interface ApiTransaction {
   fee: string;
   memo: string;
   type: string;
-  status: string;
+  status: string | number;
   chain: string;
   timestamp: string;
   block_height: number;
@@ -136,6 +137,166 @@ export async function fetchTransactions(
     }
 
     return await response.json();
+  }
+}
+
+/**
+ * Fetch transactions with automatic fallback to node RPC if server fails
+ * @param filters - Filter parameters
+ * @param options - Additional options including blockchain store for RPC access
+ * @returns Promise with transactions response
+ */
+export async function fetchTransactionsWithFallback(
+  filters: TransactionFilters = {},
+  options?: {
+    chainStore?: any;
+    baseStore?: any;
+  }
+): Promise<TransactionsResponse> {
+  try {
+    // Try server first
+    return await fetchTransactions(filters);
+  } catch (serverError) {
+    console.warn('[Transactions Fallback] Server failed, trying node...', serverError);
+
+    // Fallback to node RPC
+    if (!options?.chainStore || !options?.baseStore) {
+      console.error('[Transactions Fallback] No blockchain/base store provided for fallback');
+      throw serverError;
+    }
+
+    try {
+      const { decodeTxRaw } = await import('@cosmjs/proto-signing');
+      const { fromBase64 } = await import('@cosmjs/encoding');
+      const { hashTx } = await import('@/libs');
+
+      const { chainStore, baseStore } = options;
+      const { page = 1, limit = 25, chain = 'pocket-lego-testnet', address } = filters;
+
+      // Wait for RPC
+      let retries = 0;
+      while (!chainStore.rpc && retries < 10) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        retries++;
+      }
+
+      if (!chainStore.rpc) {
+        throw new Error('RPC not available');
+      }
+
+      // Get latest block
+      if (!baseStore.latest?.block?.header?.height) {
+        const latestBlock = await chainStore.rpc.getBaseBlockLatest();
+        if (latestBlock?.block?.header?.height) {
+          baseStore.latest = latestBlock;
+        }
+      }
+
+      const currentHeight = Number(baseStore.latest?.block?.header?.height || 0);
+      if (currentHeight === 0) {
+        throw new Error('No block data available');
+      }
+
+      // Fetch blocks
+      const blocksToFetch = 50;
+      const startBlock = Math.max(currentHeight - ((page - 1) * blocksToFetch) - blocksToFetch + 1, 1);
+      const endBlock = Math.max(currentHeight - ((page - 1) * blocksToFetch), 1);
+
+      const blockPromises = [];
+      for (let height = endBlock; height >= startBlock; height--) {
+        blockPromises.push(
+          chainStore.rpc.getBaseBlockAt(String(height)).catch(() => null)
+        );
+      }
+
+      const fetchedBlocks = await Promise.all(blockPromises);
+      const allNodeTxs: ApiTransaction[] = [];
+
+      fetchedBlocks.forEach((block: any, blockIndex: number) => {
+        if (!block?.block) return;
+
+        const height = endBlock - blockIndex;
+        const blockTime = block.block.header?.time || new Date().toISOString();
+        const rawTxs = block.block.data?.txs || [];
+
+        rawTxs.forEach((txBase64: string, txIndex: number) => {
+          try {
+            if (!txBase64) return;
+
+            const raw = fromBase64(txBase64);
+            const txHash = hashTx(raw);
+            const decodedTx = decodeTxRaw(raw);
+
+            const messages = decodedTx.body?.messages || [];
+            if (messages.length === 0) return;
+
+            const firstMsg: any = messages[0];
+            let msgType = firstMsg.typeUrl || 'Unknown';
+            if (msgType.includes('.')) {
+              const parts = msgType.split('.');
+              msgType = parts[parts.length - 1];
+            }
+
+            const msgValue = firstMsg.value || {};
+            let amount = '0';
+            if (msgValue.amount && Array.isArray(msgValue.amount)) {
+              amount = msgValue.amount[0]?.amount || '0';
+            }
+
+            let fee = '0';
+            if (decodedTx.authInfo?.fee?.amount?.[0]?.amount) {
+              fee = decodedTx.authInfo.fee.amount[0].amount;
+            }
+
+            const sender = msgValue.fromAddress || msgValue.sender || msgValue.delegatorAddress || '';
+            const recipient = msgValue.toAddress || msgValue.recipient || msgValue.validatorAddress || '';
+
+            // Filter by address if provided
+            if (address && sender !== address && recipient !== address) {
+              return;
+            }
+
+            allNodeTxs.push({
+              id: `${height}-${txIndex}`,
+              hash: txHash,
+              block_id: block.block_id?.hash || '',
+              block_height: parseInt(String(height)),
+              status: 'success',
+              amount: amount,
+              type: msgType,
+              fee: fee,
+              timestamp: blockTime,
+              sender: sender,
+              recipient: recipient,
+              memo: decodedTx.body?.memo || '',
+              chain: chain,
+              tx_data: decodedTx
+            });
+          } catch (err) {
+            console.warn(`[Transactions Fallback] Error decoding tx:`, err);
+          }
+        });
+      });
+
+      // Apply pagination
+      const paginatedTxs = allNodeTxs.slice(0, limit);
+      const avgTxPerBlock = allNodeTxs.length / blocksToFetch || 1;
+      const totalEstimate = Math.floor(currentHeight * avgTxPerBlock);
+
+      return {
+        data: paginatedTxs,
+        meta: {
+          total: totalEstimate,
+          page: page,
+          limit: limit,
+          totalPages: Math.ceil(totalEstimate / limit),
+          failedLast24h: 0
+        }
+      };
+    } catch (nodeError) {
+      console.error('[Transactions Fallback] Node fallback also failed:', nodeError);
+      throw new Error('Both server and node are unavailable');
+    }
   }
 }
 

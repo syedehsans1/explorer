@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { Icon } from '@iconify/vue';
 import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
 
 // Components
 import newFooter from '@/layouts/components/NavFooter.vue';
@@ -13,6 +14,7 @@ import { useBaseStore, useBlockchain } from '@/stores';
 import type { NavGroup, NavLink, NavSectionTitle, VerticalNavItems } from '../types';
 import dayjs from 'dayjs';
 
+const route = useRoute();
 const dashboard = useDashboard();
 dashboard.initial();
 const blockchain = useBlockchain();
@@ -68,6 +70,16 @@ const behind = computed(() => {
 const currentChain = computed(() => {
   return blockchain.current
 })
+
+// Check if current route is documentation page
+const isDocumentationPage = computed(() => {
+  return route.path.includes('/documentation');
+});
+
+// Compute container class based on route
+const containerClass = computed(() => {
+  return isDocumentationPage.value ? 'mx-auto' : 'mx-auto w-11/12';
+});
 
 // Add this for responsive behavior
 const isMobile = ref(false);
@@ -307,7 +319,7 @@ const handleSafariChainChange = (event: Event) => {
               </label>
               <ul v-show="moduleDropdownOpen" tabindex="0"
                 class="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-52 z-50" style="font-size: 0.8rem;">
-                <li v-for="(item, index) in ['services', 'noderunners']" :key="'dashboard-' + index" @click="toggleModuleDropdown">
+                <li v-for="(item, index) in ['services', 'operator-lookup']" :key="'dashboard-' + index" @click="toggleModuleDropdown">
                   <RouterLink :to="`/${currentChain?.chainName}/dashboards/${item}`" @click="sidebarShow = false"
                     class="hover:bg-gray-100 dark:hover:bg-[#373f59]">
                     <div class="capitalize text-gray-700 dark:text-gray-200" style="font-size: 0.8rem;">
@@ -418,8 +430,8 @@ const handleSafariChainChange = (event: Event) => {
         </div>
       </div>
     </header>
-    <div class="bg-white dark:bg-[#1a1f26]" style="min-height:65vh">
-      <div class="w-11/12 mx-auto">
+    <div class="bg-white dark:bg-[#1a1f26]" style="min-height:80vh">
+      <div :class="containerClass">
         <!-- 👉 Pages -->
         <div class="">
           <div v-if="behind" class="alert alert-error mb-4">

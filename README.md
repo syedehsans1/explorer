@@ -1,56 +1,153 @@
-<div align="center">
+# Pocket Network Explorer
 
-![Pocket Wallet](./public/logo.svg)
+A blockchain explorer and dashboard for **Pocket Network**, forked from the Cosmos-based [ping-pub/explorer](https://github.com/ping-pub/explorer). Data is fetched from both the **indexer** (separate repository) and **Pocket RPC**, with automatic fallback to RPC when the indexer is unavailable.
 
-<h1>Pocket Dashboard</h1>
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-**Pocket Dashboard is not only an explorer but also a wallet and more ... 🛠**
+---
 
-[![version](https://img.shields.io/github/tag/ping-pub/explorer.svg)](https://github.com/ping-pub/explorer/releases/latest)
-[![GitHub](https://img.shields.io/github/license/ping-pub/explorer.svg)](https://github.com/ping-pub/explorer/blob/master/LICENSE)
-[![Twitter URL](https://img.shields.io/twitter/url/https/twitter.com/bukotsunikki.svg?style=social&label=Follow%20%40ping_pub)](https://twitter.com/ping_pub)
-[![https://discord.gg/CmjYVSr6GW](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/CmjYVSr6GW)
+## Overview
 
+Pocket Network Explorer uses **two data sources**: the **indexer** (hosted separately; see its own repository) for transaction history, proof submissions, and analytics; and **Pocket LCD/RPC** for blocks, chain state, and real-time data. When the indexer is down or unreachable, the UI automatically **falls back to RPC** so blocks and transactions can still be viewed. The frontend supports multiple Pocket chains and Pocket-specific modules (applications, suppliers, gateways, services, validators).
 
-</div>
+### What’s different from the original Cosmos explorer?
 
-`Pocket Dashboard` is a light explorer for Cosmos-based Blockchains.  https://ping.pub .
+- **Pocket-only focus**: Configured for Pocket Network (mainnet, testnet, Poktroll).
+- **Pocket-specific features**: Applications, suppliers, gateways, services, validators, parameters, operator lookup, and service dashboards.
+- **Indexer + RPC**: Data from indexer API first, with fallback to node RPC when the indexer is unavailable. The indexer is maintained in a **separate repository**.
 
-## What sets Pocket Dashboard apart from other explorers?
-**Pocket Dashboard** stands out by providing a real-time exploration of blockchain data without relying on caching or pre-processing. It exclusively fetches data from the Cosmos full node via LCD/RPC endpoints, ensuring a truly authentic experience. This approach is referred to as the "Light Explorer."
+---
 
-## Are you interested in listing your blockchain on https://ping.pub?
+## Features
 
-To make this repository clean, please submit your request to https://github.com/ping-pub/ping.pub.git
+- **Dashboard** – Blocks, transactions, network stats, and charts
+- **Blocks & transactions** – Browse and search via indexer API with RPC fallback
+- **Validators** – List, status, and performance
+- **Applications** – Pocket application accounts and usage
+- **Suppliers** – Supplier (node runner) operators and metrics
+- **Gateways** – Gateway operators
+- **Services** – Service-level analytics and dashboards
+- **Parameters** – Chain parameters (gov-style)
+- **Operator lookup** – Look up operators by address or identity
+- **Multi-chain** – Switch between Pocket mainnet, testnet, and Poktroll
+- **Maintenance mode** – Optional maintenance page via env (e.g. `VITE_MAINTENANCE_MODE=true`)
 
+---
 
-## Why does Pocket Dashboard rely on official/trusted third-party public LCD/RPC servers?
-There are two primary reasons for this choice:
+## Tech stack
 
- - Trust: In a decentralized system, it is crucial to avoid relying solely on a single entity. By utilizing official/trusted third-party public LCD/RPC servers, Pocket Dashboard ensures that the data is sourced from a network of trusted participants.
- - Limited Resources: As Pocket Dashboard plans to list hundreds of Cosmos-based blockchains in the future, it is impractical for the Pocket team to operate validators or full nodes for all of them. Leveraging trusted third-party servers allows for more efficient resource allocation.
+- **Frontend:** Vue 3, TypeScript, Vite, Vue Router, Pinia, Tailwind CSS, DaisyUI, CosmJS
+- **Data sources:** Indexer API (separate repo) and Pocket LCD/RPC, with fallback from indexer to RPC
 
-## Donation
+---
 
-Your donation will help us make better products. Thanks in advance.
+## Supported chains
 
- - Address for ERC20: USDC, USDT, ETH
+| Chain                | Config (mainnet/testnet) | Description        |
+|----------------------|--------------------------|--------------------|
+| Pocket Mainnet       | `pocket-mainnet`         | Production network |
+| Pocket Lego Testnet  | `pocket-lego-testnet`   | Testnet (beta)     |
+| Pocket Beta (testnet)| `pocket-beta`            | Testnet            |
+| Poktroll Mainnet     | `poktroll-mainnet`      | Poktroll network   |
+
+Chain definitions live in `chains/mainnet/` and `chains/testnet/` (e.g. `chains/mainnet/pocket-lego-testnet.json`, `chains/testnet/pocket-mainnet.json`).
+
+---
+
+## Prerequisites
+
+- **Node.js** 18+
+- **npm** (or compatible package manager)
+
+---
+
+## Setup guide
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/pokt-network/explorer.git
+cd explorer
+npm install
 ```
-0x88BFec573Dd3E4b7d2E6BfD4D0D6B11F843F8aa1
+
+### 2. Frontend (explorer UI)
+
+Run the dev server:
+
+```bash
+npm run dev
 ```
 
-#### Donations from project
+The app will be at `http://localhost:5173` (or the port Vite prints). By default it redirects to Pocket mainnet or testnet based on the URL (e.g. `beta` in the host/path can send you to testnet). The dev server proxies `/api` to the indexer; set the proxy target in `vite.config.ts` to your indexer base URL, or ensure the indexer is running elsewhere and the app is configured to reach it. When the indexer is unavailable, the UI falls back to RPC for blocks and transactions.
 
-- Point Network: 1000USDC and $1000 worth of POINT
-- Bitsong: 50k BTSG
-- IRISnet: 100k IRIS
+**Optional frontend env** (create `.env` in project root if needed):
 
-## Hire us
+```bash
+# Show maintenance page instead of the app
+VITE_MAINTENANCE_MODE=true
+# Optional message for users
+VITE_MAINTENANCE_ESTIMATED_TIME=Back in 1 hour
+```
 
-You can hire us by submiting an issue and fund the issue on [IssueHunter](https://issuehunt.io/r/ping-pub/explorer)
+**Build for production:**
 
+```bash
+npm run build
+npm run preview   # optional: preview production build
+```
 
-## Contributors
+### 3. Indexer API
 
-Developers: @liangping @dingyiming
+Transaction history, proof submissions, and related analytics are provided by an **indexer** maintained in a **separate repository**. Point the explorer at your indexer by configuring the `/api` proxy in `vite.config.ts` (dev) or your production API base URL. If the indexer is down, the explorer automatically falls back to Pocket RPC for blocks and transactions.
 
+---
+
+## NPM scripts (root)
+
+| Script         | Description                    |
+|----------------|--------------------------------|
+| `npm run dev`  | Start Vite dev server          |
+| `npm run build`| Type-check + production build  |
+| `npm run preview` | Preview production build    |
+| `npm run type-check` | Run Vue/TS type check     |
+
+---
+
+## Project structure
+
+```
+explorer/
+├── chains/                 # Chain configs (mainnet & testnet)
+│   ├── mainnet/
+│   └── testnet/
+├── public/                 # Static assets (e.g. logo)
+├── src/
+│   ├── modules/[chain]/    # Chain-scoped pages (dashboard, blocks, tx, validators, etc.)
+│   ├── stores/             # Pinia stores (blockchain, base, etc.)
+│   ├── libs/               # Helpers (e.g. transactions API client)
+│   ├── components/
+│   ├── layouts/
+│   ├── pages/              # Global pages (e.g. documentation)
+│   └── plugins/
+├── index.html
+├── vite.config.ts
+├── package.json
+├── PROOF_SUBMISSIONS_API.md   # Proof submissions API reference (indexer)
+└── README.md                  # This file
+```
+
+---
+
+## API documentation
+
+The indexer (separate repo) exposes transaction and proof-submission APIs. This repo documents the contract:
+
+- **Proof submissions & rewards analytics:** [PROOF_SUBMISSIONS_API.md](./PROOF_SUBMISSIONS_API.md)
+- Other API docs: `VALIDATOR_PERFORMANCE_API.md`, `VALIDATOR_SERVICE_SEARCH_API.md`, `NETWORK_GROWTH_API.md`, etc.
+
+---
+
+## License
+
+See [LICENSE](./LICENSE).

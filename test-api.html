@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test - Pocket Indexer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #4CAF50;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .result.success {
+            border-color: #4CAF50;
+            background: #f1f8f4;
+        }
+        .result.error {
+            border-color: #f44336;
+            background: #fef1f0;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.ok {
+            background: #4CAF50;
+            color: white;
+        }
+        .status.error {
+            background: #f44336;
+            color: white;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 API Connection Test</h1>
+
+        <div class="info">
+            <strong>Current API URL:</strong> <span id="apiUrl"></span>
+        </div>
+
+        <!-- Test 1: Server Reachability -->
+        <div class="test-section">
+            <h2>Test 1: Server Reachability <span id="test1Status"></span></h2>
+            <p>Check if backend server is running</p>
+            <button onclick="testServerConnection()">Test Connection</button>
+            <div id="test1Result" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Test 2: Quick Registration -->
+        <div class="test-section">
+            <h2>Test 2: Quick Registration (Email Only) <span id="test2Status"></span></h2>
+            <input type="email" id="quickEmail" placeholder="Enter email (e.g., test@example.com)" value="test@example.com">
+            <button onclick="testQuickRegister()">Test Quick Register</button>
+            <div id="test2Result" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Test 3: Full Registration -->
+        <div class="test-section">
+            <h2>Test 3: Full Registration (With Password) <span id="test3Status"></span></h2>
+            <input type="text" id="fullName" placeholder="Full Name" value="Test User">
+            <input type="email" id="fullEmail" placeholder="Email" value="testfull@example.com">
+            <input type="password" id="fullPassword" placeholder="Password (min 8 chars)" value="password123">
+            <input type="text" id="fullOrg" placeholder="Organization (optional)" value="Test Org">
+            <button onclick="testFullRegister()">Test Full Register</button>
+            <div id="test3Result" class="result" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://192.168.1.2:3006';
+        document.getElementById('apiUrl').textContent = API_URL;
+
+        function showResult(elementId, statusId, data, isSuccess) {
+            const resultEl = document.getElementById(elementId);
+            const statusEl = document.getElementById(statusId);
+
+            resultEl.style.display = 'block';
+            resultEl.className = 'result ' + (isSuccess ? 'success' : 'error');
+            resultEl.textContent = JSON.stringify(data, null, 2);
+
+            statusEl.innerHTML = `<span class="status ${isSuccess ? 'ok' : 'error'}">${isSuccess ? '✓ PASS' : '✗ FAIL'}</span>`;
+        }
+
+        async function testServerConnection() {
+            const resultId = 'test1Result';
+            const statusId = 'test1Status';
+
+            try {
+                console.log('Testing connection to:', API_URL);
+
+                const response = await fetch(API_URL + '/api/v1/auth/register', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                showResult(resultId, statusId, {
+                    status: 'Server is reachable!',
+                    statusCode: response.status,
+                    headers: Object.fromEntries(response.headers.entries())
+                }, true);
+            } catch (error) {
+                showResult(resultId, statusId, {
+                    error: 'Server not reachable',
+                    message: error.message,
+                    details: 'Make sure backend server is running on ' + API_URL
+                }, false);
+            }
+        }
+
+        async function testQuickRegister() {
+            const resultId = 'test2Result';
+            const statusId = 'test2Status';
+            const email = document.getElementById('quickEmail').value;
+
+            if (!email) {
+                alert('Please enter an email');
+                return;
+            }
+
+            try {
+                console.log('Testing Quick Registration with:', email);
+
+                const response = await fetch(API_URL + '/api/v1/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult(resultId, statusId, {
+                        success: true,
+                        statusCode: response.status,
+                        message: 'Quick registration successful!',
+                        data: data,
+                        token: data.data?.token?.token ? '✓ Token received' : '✗ No token'
+                    }, true);
+                } else {
+                    showResult(resultId, statusId, {
+                        success: false,
+                        statusCode: response.status,
+                        error: data.error || 'Registration failed',
+                        response: data
+                    }, false);
+                }
+            } catch (error) {
+                showResult(resultId, statusId, {
+                    error: 'Network Error',
+                    message: error.message,
+                    details: 'Cannot connect to server. Check if backend is running.'
+                }, false);
+            }
+        }
+
+        async function testFullRegister() {
+            const resultId = 'test3Result';
+            const statusId = 'test3Status';
+
+            const name = document.getElementById('fullName').value;
+            const email = document.getElementById('fullEmail').value;
+            const password = document.getElementById('fullPassword').value;
+            const organization = document.getElementById('fullOrg').value;
+
+            if (!name || !email || !password) {
+                alert('Please fill all required fields');
+                return;
+            }
+
+            try {
+                console.log('Testing Full Registration with:', { name, email, organization });
+
+                const response = await fetch(API_URL + '/api/v1/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name,
+                        email,
+                        password,
+                        organization: organization || undefined
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResult(resultId, statusId, {
+                        success: true,
+                        statusCode: response.status,
+                        message: 'Full registration successful!',
+                        data: data,
+                        requiresVerification: data.requiresVerification ? '✓ Email verification required' : '✗ No verification needed',
+                        accountType: data.accountType
+                    }, true);
+                } else {
+                    showResult(resultId, statusId, {
+                        success: false,
+                        statusCode: response.status,
+                        error: data.error || 'Registration failed',
+                        response: data
+                    }, false);
+                }
+            } catch (error) {
+                showResult(resultId, statusId, {
+                    error: 'Network Error',
+                    message: error.message,
+                    details: 'Cannot connect to server. Check if backend is running.'
+                }, false);
+            }
+        }
+
+        // Auto-test connection on load
+        window.onload = function() {
+            console.log('API Test Page Loaded');
+            console.log('API URL:', API_URL);
+            testServerConnection();
+        };
+    </script>
+</body>
+</html>

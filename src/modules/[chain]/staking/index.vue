@@ -50,6 +50,15 @@ const selfBonded = ref({
   }
 } as Delegation);
 
+// Status filter - default "Staked" selected
+const selectedStatus = ref('BOND_STATUS_BONDED');
+const statusOptions = [
+  { value: 'all', label: 'All' },
+  { value: 'BOND_STATUS_BONDED', label: 'Staked' },
+  { value: 'BOND_STATUS_UNBONDING', label: 'Unstaking' },
+  { value: 'BOND_STATUS_UNBONDED', label: 'Unstaked' }
+];
+
 addresses.value.account = operatorAddressToAccount(validator);
 // load self bond
 staking
@@ -216,13 +225,19 @@ function isFeatured(endpoints: string[], who?: { website?: string, moniker: stri
 }
 
 const validatorsList = computed(() => {
-    const activeCount = allValidators.value.filter(v => v.status === 'BOND_STATUS_BONDED').length;
-    return allValidators.value.map((x, i) => ({
-        v: x,
-        rank: x.status === 'BOND_STATUS_BONDED' ? calculateRank(i, activeCount) : 'primary',
-        logo: logo(x.description.identity),
-        statusBadge: getStatusBadge(x.status),
-    }));
+  let filtered = allValidators.value
+  if (selectedStatus.value !== 'all') {
+    filtered = allValidators.value.filter(
+      v => v.status === selectedStatus.value
+    )
+  }
+  const activeCount = filtered.filter(v => v.status === 'BOND_STATUS_BONDED').length;
+  return filtered.map((x, i) => ({
+    v: x,
+    rank: x.status === 'BOND_STATUS_BONDED' ? calculateRank(i, activeCount) : 'primary',
+    logo: logo(x.description.identity),
+    statusBadge: getStatusBadge(x.status),
+  }));
 });
 
 const getStatusBadge = (status: string) => {
@@ -283,7 +298,7 @@ const loadAvatars = () => {
     Promise.allSettled(promises).then(() =>{
         localStorage.setItem('avatars', JSON.stringify(avatars.value))
     }
-    );
+);
 };
 
 const logo = (identity?: string) => {
@@ -319,8 +334,8 @@ const paginatedValidators = computed(() => {
   return validatorsList.value.slice(start, end)
 })
 
-// Reset to first page when page size changes
-watch(itemsPerPage, () => {
+// Reset to first page when filters change
+watch([itemsPerPage, selectedStatus], () => {
   currentPage.value = 1
 })
 
@@ -340,7 +355,7 @@ function goToLast() {
 </script>
 <template>
     <div class="pt-[6.5rem]">  
-        <p class="bg-[#ffffff] hover:bg-base-200 text-2xl w-full px-4 py-4 my-4 font-bold text-[#000000] dark:text-[#ffffff]  rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">Validators</p>
+         <p class="bg-[#ffffff] hover:bg-base-200 text-2xl w-full px-4 py-4 my-4 font-bold text-[#000000] dark:text-[#ffffff]  rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">Validators</p>
         <div class="grid sm:grid-cols-1 md:grid-cols-4 py-4 gap-4 mb-4">
             <div class="flex bg-[#ffffff] hover:bg-base-200 p-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                 <span>
@@ -390,19 +405,38 @@ function goToLast() {
                     <div class="font-bold">{{ format.percent(slashing.slash_fraction_downtime) }}</div>
                 </span>
             </div>
-        </div>
+        </div>    
 
-        <div>
-        <div class="bg-base-200 mb-4 rounded-xl hover:bg-base-300 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
-            <div v-if="isLoading" class="flex justify-center items-center p-8 rounded-xl">
-            <span class="loading loading-spinner loading-lg"></span>
+        <!-- Validators Table Section -->
+        <div class="flex flex-col gap-1 bg-white dark:bg-[rgba(255,255,255,.03)] rounded-xl shadow-md border dark:border-white/10 overflow-hidden mb-4">
+            <!-- Status Filter Tabs -->
+            <div class="">
+                <div class="flex items-center bg-white dark:bg-[rgba(255,255,255,.05)] rounded-lg border border-gray-200 dark:border-white/10 px-4 py-3 inline-flex gap-1">
+                    <button
+                        v-for="option in statusOptions"
+                        :key="option.value"
+                        @click="selectedStatus = option.value"
+                        :class="[
+                            'px-4 py-2 rounded-md text-sm font-medium transition-all duration-200',
+                            selectedStatus === option.value 
+                                ? 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 bg-[#007bff] text-white shadow-sm'
+                                : 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 bg-base-100 text-base-content hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]  border border-base-300 dark:border-base-400'
+                        ]"
+                    >
+                        {{ option.label }}
+                    </button>
+                </div>
             </div>
 
-            <!-- scroll hataya -->
+            <div v-if="isLoading" class="flex justify-center items-center p-8 rounded-xl">
+                <span class="loading loading-spinner loading-lg"></span>
+            </div>
+
             <div
             v-else
             class="bg-base-200 hover:bg-base-300 dark:bg-[rgba(255,255,255,.03)] rounded-xl dark:border-base-200 px-4 pt-2 pb-2"
             >
+            <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
             <table class="table w-full rounded-xl">
                 <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
                 <tr class="text-sm font-semibold">
@@ -516,6 +550,7 @@ function goToLast() {
                 </tr>
                 </tbody>
             </table>
+            </div>
 
             <!-- Pagination Section -->
             <div class="flex justify-between items-center gap-4 my-6 px-6">
@@ -576,9 +611,8 @@ function goToLast() {
                         </button>
                     </div>
                 </div>
+                </div>
             </div>
-            </div>
-        </div>
         </div>
     </div>
 </template>

@@ -90,6 +90,13 @@ export interface Application {
     balance?: Coin;
     service_configs: any;
     delegatee_gateway_addresses: string[];
+    // Optional fields used in applications UI
+    chains?: string[];
+    status?: string;
+    unstake_session_end_height?: string;
+    unbonding_time?: string;
+    unbonding_height?: string;
+    state?: string;
 }
 
 

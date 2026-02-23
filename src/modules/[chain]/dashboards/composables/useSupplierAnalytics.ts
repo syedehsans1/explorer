@@ -81,8 +81,8 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Helper function to make API request
 async function fetchApi(url: string, params: URLSearchParams, body?: any): Promise<any> {
-  const isRewardsEndpoint = url.includes('/proof-submissions/rewards');
-  const isSummaryEndpoint = url.includes('/proof-submissions/summary');
+  const isRewardsEndpoint = url.includes('/claims/rewards');
+  const isSummaryEndpoint = url.includes('/claims/summary');
   
   // Check if we have supplier_address parameter
   const hasSupplierAddress = params.has('supplier_address');
@@ -155,7 +155,7 @@ export async function fetchNetworkAverages(
     if (endDate) params.append('end_date', endDate);
     params.append('limit', '500'); // Get enough data for accurate averages
 
-    const data = await fetchApi('/api/v1/proof-submissions/rewards', params);
+    const data = await fetchApi('/api/v1/claims/rewards', params);
     const rewards = data.data || [];
 
     if (rewards.length === 0) {
@@ -202,7 +202,7 @@ export async function fetchTopPerformers(
     params.append('group_by', 'total');
     params.append('limit', '500'); // Get enough data to calculate top 10%
 
-    const data = await fetchApi('/api/v1/validators/performance', params);
+    const data = await fetchApi('/api/v1/suppliers/performance', params);
     const performers = data.data || [];
 
     if (performers.length === 0) {

@@ -173,6 +173,7 @@ async function loadApplications() {
         },
         balance: item.balance, // May need to fetch separately
         service_configs: item.service_configs || item.services || [],
+        chains: item.chains || [],
         delegatee_gateway_addresses: item.delegatee_gateway_addresses || [],
         status: item.status,
         unstake_session_end_height: item.unstake_session_end_height,
@@ -330,10 +331,10 @@ const CACHE_EXPIRATION_MS = 60000
 // Get API chain name helper
 const getApiChainName = (chainName: string) => {
   const chainMap: Record<string, string> = {
-    'pocket-beta': 'pocket-testnet-beta',
+    'pocket-lego-testnet': 'pocket-lego-testnet',
     'pocket-mainnet': 'pocket-mainnet'
   }
-  return chainMap[chainName] || chainName || 'pocket-testnet-beta'
+  return chainMap[chainName] || chainName || 'pocket-lego-testnet'
 }
 
 const apiChainName = computed(() =>
@@ -467,6 +468,7 @@ async function loadNetworkStats() {
     </div>
 
     <div class="bg-base-200 p-2 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+      <div class="overflow-auto" style="max-height:calc(100vh - 22rem)">
       <table class="table w-full table-compact rounded-xl">
         <thead class="bg-base-200 dark:bg-[rgba(255,255,255,.03)] sticky top-0 border-0">
           <tr class="text-sm font-semibold">
@@ -526,8 +528,11 @@ async function loadNetworkStats() {
                 {{ item.balance ? format.formatToken(item.balance) : "-" }}
               </span>
             </td>
-            <td>{{ item.service_configs?.length || 0 }}</td>
+            <td>{{ item.chains?.length || 0 }}</td>
             <td>
+              {{ item.chains?.length ? item.chains.join(', ') : '-' }}
+            </td>
+            <!-- <td>
               {{
                 item.service_configs
                   ?.map((sc: any) =>
@@ -535,7 +540,7 @@ async function loadNetworkStats() {
                   )
                   .join(', ')
               }}
-            </td>
+            </td> -->
             <td class="">
               <span
                 class="text-xs truncate py-1 px-3 rounded-full inline-flex items-center gap-2"
@@ -589,6 +594,7 @@ async function loadNetworkStats() {
           </tr>
         </tbody>
       </table>
+      </div>
 
       <!-- Pagination Bar -->
       <div class="flex justify-between items-center gap-4 my-6 px-6">

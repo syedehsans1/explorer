@@ -5,6 +5,7 @@ import {
   useStakingStore,
   useTxDialog,
   useCoingecko,
+  useBaseStore,
 } from '@/stores';
 import DynamicComponent from '@/components/dynamic/DynamicComponent.vue';
 import DonutChart from '@/components/charts/DonutChart.vue';
@@ -29,7 +30,7 @@ import type { Coin } from '@cosmjs/amino';
 import Countdown from '@/components/Countdown.vue';
 import { fromBase64 } from '@cosmjs/encoding';
 import { useClipboard } from '@vueuse/core'
-import { fetchTransactions, type ApiTransaction, type TransactionFilters } from '@/libs/transactions';
+import { fetchTransactions, fetchTransactionsWithFallback, type ApiTransaction, type TransactionFilters } from '@/libs/transactions';
 
 const props = defineProps(['address', 'chain']);
 
@@ -41,6 +42,7 @@ const stakingStore = useStakingStore();
 const dialog = useTxDialog();
 const format = useFormatter();
 const coingecko = useCoingecko();
+const base = useBaseStore();
 const account = ref({} as AuthAccount);
 const applications = ref({} as Application);
 const gateways = ref({} as Gateway);
@@ -74,10 +76,10 @@ const showAdvancedTxFilters = ref(false);
 // Map frontend chain names to API chain names
 const getApiChainName = (chainName: string) => {
   const chainMap: Record<string, string> = {
-    'pocket-beta': 'pocket-testnet-beta',
+    'pocket-lego-testnet': 'pocket-lego-testnet',
     'pocket-mainnet': 'pocket-mainnet'
   };
-  return chainMap[chainName] || chainName || 'pocket-testnet-beta';
+  return chainMap[chainName] || chainName || 'pocket-lego-testnet';
 };
 
 // Type tab mappings
@@ -505,7 +507,10 @@ async function loadTransactions(address: string) {
       filters.max_amount = txMaxAmount.value;
     }
 
-    const data = await fetchTransactions(filters);
+    const data = await fetchTransactionsWithFallback(filters, {
+      chainStore: blockchain,
+      baseStore: base
+    });
     txs.value = data.data || [];
     totalTxCount.value = data.meta?.total || 0;
     totalTxPages.value = data.meta?.totalPages || 0;
@@ -1771,12 +1776,12 @@ async function loadAddressPerformance(address: string) {
       <table class="table table-compact w-full">
         <thead class="bg-base-200 dark:bg-[rgba(255,255,255,.03)] sticky top-0 border-0">
           <tr class="border-b-[0px] text-sm font-semibold">
-            <th class="">{{ $t('account.height') }}</th>
-            <th class="">{{ $t('account.hash') }}</th>
-            <th class="">{{ $t('account.type') }}</th>
-            <th class="">{{ $t('account.amount') }}</th>
-            <th class="">{{ $t('tx.fee') }}</th>
-            <th class="">{{ $t('account.time') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.height') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.hash') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.type') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.amount') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('tx.fee') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.time') }}</th>
           </tr>
         </thead>
         <tbody class="bg-base-100 relative">

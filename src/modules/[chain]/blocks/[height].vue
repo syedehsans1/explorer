@@ -5,7 +5,7 @@ import TxsElement from '@/components/dynamic/TxsElement.vue';
 import DynamicComponent from '@/components/dynamic/DynamicComponent.vue';
 import { computed } from '@vue/reactivity';
 import { onBeforeRouteUpdate } from 'vue-router';
-import { useBaseStore, useFormatter, useBlockchain } from '@/stores';
+import { useBaseStore, useFormatter, useBlockchain, useStakingStore } from '@/stores';
 import type { Block } from '@/types';
 import Countdown from '@/components/Countdown.vue';
 import { useSEO } from '@/composables/useSEO';
@@ -15,8 +15,10 @@ const props = defineProps(['height', 'chain']);
 const store = useBaseStore();
 const format = useFormatter()
 const blockchain = useBlockchain();
+const staking = useStakingStore();
 const current = ref({} as Block)
 const target = ref(Number(props.height || 0))
+const isLoadingBlock = ref(false)
 
 const height = computed(() => {
   return Number(current.value.block?.header?.height || props.height || 0);
@@ -42,7 +44,13 @@ const isFutureBlock = computed({
   get: () => {
     const latest = store.latest?.block?.header.height
     const isFuture = latest ? target.value > Number(latest) : true
-    if (!isFuture && !current.value.block_id) store.fetchBlock(target.value).then(x => current.value = x)
+    if (!isFuture && !current.value.block_id) {
+      isLoadingBlock.value = true
+      store.fetchBlock(target.value).then(x => {
+        current.value = x
+        isLoadingBlock.value = false
+      })
+    }
     return isFuture
   },
   set: val => {
@@ -71,9 +79,32 @@ function updateTarget() {
   console.log(target.value)
 }
 
+// Load validators and block data on mount
+onMounted(async () => {
+  try {
+    // Fetch validators first so moniker lookup works
+    if (!staking.validators || staking.validators.length === 0) {
+      await staking.fetchValidators('BOND_STATUS_BONDED', 500);
+    }
+    
+    // Then fetch the block
+    isLoadingBlock.value = true;
+    const blockData = await store.fetchBlock(target.value);
+    current.value = blockData;
+    isLoadingBlock.value = false;
+  } catch (error) {
+    console.error('Error loading block:', error);
+    isLoadingBlock.value = false;
+  }
+});
+
 onBeforeRouteUpdate(async (to, from, next) => {
   if (from.path !== to.path) {
-    store.fetchBlock(String(to.params.height)).then(x => current.value = x);
+    isLoadingBlock.value = true
+    store.fetchBlock(String(to.params.height)).then(x => {
+      current.value = x
+      isLoadingBlock.value = false
+    });
     next();
   }
 });
@@ -140,14 +171,22 @@ onBeforeRouteUpdate(async (to, from, next) => {
           </RouterLink>
         </div>
       </div>
-      
-      
 
-      <div class="flex bg-[#ffffff] hover:bg-base-200 px-4 pt-3 pb-4 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
-        <div>
-          <DynamicComponent :value="current.block_id" />
+      <!-- Loading Indicator -->
+      <div v-if="isLoadingBlock" class="flex items-center justify-center py-20">
+        <div class="flex flex-col items-center gap-4">
+          <div class="loading loading-spinner loading-lg text-primary"></div>
+          <p class="text-lg text-gray-500 dark:text-gray-400">{{ $t('block.loading') || 'Loading Block...' }}</p>
         </div>
       </div>
+
+      <!-- Block Data -->
+      <div v-else>
+        <div class="flex bg-[#ffffff] hover:bg-base-200 px-4 pt-3 pb-4 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+          <div>
+            <DynamicComponent :value="current.block_id" />
+          </div>
+        </div>
 
 
       <div class="flex bg-[#ffffff] hover:bg-base-200 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
@@ -164,11 +203,12 @@ onBeforeRouteUpdate(async (to, from, next) => {
         <TxsElement :value="current.block?.data?.txs" />
       </div>
 
-      <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
-        <div class="px-4 py-2">
-          <h2 class="card-title flex flex-row justify-between text-[#171C1F] dark:text-[#ffffff;]">{{ $t('block.last_commit') }}</h2>
+        <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+          <div class="px-4 py-2">
+            <h2 class="card-title flex flex-row justify-between text-[#171C1F] dark:text-[#ffffff;]">{{ $t('block.last_commit') }}</h2>
+          </div>
+          <DynamicComponent :value="current.block?.last_commit" />
         </div>
-        <DynamicComponent :value="current.block?.last_commit" />
       </div>
     </div>
   </div>

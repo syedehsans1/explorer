@@ -1,7 +1,7 @@
 {
   "module": {
     "dashboard": "Dashboard",
-    "noderunners": "Supplier Performance",
+    "operator-lookup": "Operator Lookup",
     "blocks": "Blocks",
     "applications": "Applications",
     "gateways": "Gateways",

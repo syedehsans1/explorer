@@ -39,6 +39,27 @@ const totalPages = computed(() => {
   return Math.ceil(total / itemsPerPage.value);
 });
 
+// per service totals
+const serviceTotals = ref<{ [serviceId: string]: { suppliers: number; applications: number } }>({});
+
+
+async function loadServiceTotals(serviceId: string) {
+  await waitForRpc();
+
+  try {
+    const res = await fetch(`/api/v1/services/${serviceId}?chain=${props.chain}&page=1&limit=25`)
+      .then(r => r.json());
+
+    serviceTotals.value[serviceId] = {
+      suppliers: res.meta.totalSuppliers || (res.data.suppliers?.length || 0),
+      applications: res.meta.totalApplications || (res.data.applications?.length || 0),
+    };
+  } catch (error) {
+    console.error('Error loading totals for service', serviceId, error);
+    serviceTotals.value[serviceId] = { suppliers: 0, applications: 0 };
+  }
+}
+
 const totalServices = computed(() => parseInt(pageResponse.value.total || '0'));
 
 // Client-side sorting (applied after server returns page data)
@@ -92,6 +113,13 @@ async function loadServices() {
     const response = await chainStore.rpc.getServices(pageRequest.value);
     list.value = response.service || [];
     pageResponse.value = response.pagination || {};
+
+    // Har naye service ka totals fetch karo (cache hai toh skip)
+    for (const svc of list.value) {
+      if (!serviceTotals.value[svc.id]) {
+        loadServiceTotals(svc.id);
+      }
+    }
   } catch (error) {
     console.error('Error loading services:', error);
     list.value = [];
@@ -197,18 +225,20 @@ function isMaxDifficulty(targetHash: string) {
   return targetHash.includes('////////////////////////////////////////////');
 }
 
-onMounted(() => {
-  loadServices();
+onMounted(async () => {
+  await loadServices(); // totals bhi andar se call ho jaayenge
   loadMiningDifficulties();
   loadSuppliers();
   loadApplications();
 });
+
 </script>
 
 <template>
   <div class="mb-[2vh] pt-[6.5rem]">
     <p class="bg-[#ffffff hover:bg-base-200 text-2xl w-full px-4 py-4 my-4 font-bold text-[#000000] dark:text-[#ffffff] rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">Services</p>
     <div class="bg-base-200 p-2 rounded-xl hover:bg-base-300 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
+      <div class="overflow-auto" style="max-height:calc(100vh - 18rem)">
       <table class="table w-full table-compact">
         <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
           <tr class="text-sm font-semibold rounded-xl">
@@ -303,14 +333,21 @@ onMounted(() => {
 
             <td>{{ item.compute_units_per_relay }}</td>
             <td>
-              {{ suppliers.find((s) => s.owner_address === item.owner_address)?.services || '-' }}
+              <div v-if="serviceTotals[item.id]">
+                {{ serviceTotals[item.id].suppliers || '-' }}
+              </div>
+              <span v-else>-</span>
             </td>
             <td>
-              {{ applications.find((a) => a.address === item.owner_address)?.service_configs || '-' }}
+              <div v-if="serviceTotals[item.id]">
+                {{ serviceTotals[item.id].applications || '-' }}
+              </div>
+              <span v-else>-</span>
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
 
       <!-- Pagination -->
       <div class="flex justify-between items-center gap-4 my-6 px-6">

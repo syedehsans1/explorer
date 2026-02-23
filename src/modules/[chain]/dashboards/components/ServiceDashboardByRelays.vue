@@ -19,10 +19,10 @@ const format = useFormatter();
 // Map frontend chain names to API chain names
 const getApiChainName = (chainName: string) => {
   const chainMap: Record<string, string> = {
-    'pocket-beta': 'pocket-testnet-beta',
+    'pocket-lego-testnet': 'pocket-lego-testnet',
     'pocket-mainnet': 'pocket-mainnet'
   };
-  return chainMap[chainName] || chainName || 'pocket-testnet-beta';
+  return chainMap[chainName] || chainName || 'pocket-lego-testnet';
 };
 
 const current = chainStore?.current?.chainName || props.chain || 'pocket-beta';
@@ -47,8 +47,8 @@ function shouldUsePost(params: URLSearchParams): boolean {
 
 // Helper function to make API request (GET or POST)
 async function fetchApi(url: string, params: URLSearchParams): Promise<any> {
-  const isRewardsEndpoint = url.includes('/proof-submissions/rewards');
-  const isSummaryEndpoint = url.includes('/proof-submissions/summary');
+  const isRewardsEndpoint = url.includes('/claims/rewards');
+  const isSummaryEndpoint = url.includes('/claims/summary');
   
   // Check if we have supplier_address parameter
   const hasSupplierAddress = params.has('supplier_address');
@@ -372,7 +372,7 @@ async function loadSummaryStats() {
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
     if (selectedApplication.value) params.append('application_address', selectedApplication.value);
     
-    const data = await fetchApi('/api/v1/proof-submissions/summary', params);
+    const data = await fetchApi('/api/v1/claims/summary', params);
     summaryStats.value = data.data;
   } catch (error: any) {
     console.error('Error loading summary stats:', error);
@@ -398,7 +398,7 @@ async function loadServiceRewards() {
       params.append('days', serviceRewardsDays.value.toString());
     }
 
-    const data = await fetchApi('/api/v1/proof-submissions/rewards', params);
+    const data = await fetchApi('/api/v1/claims/rewards', params);
     serviceRewards.value = data.data || [];
     serviceRewardsMeta.value = data.meta || null;
     

@@ -3,19 +3,20 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useBlockchain } from '@/stores';
-import { useValidatorServiceSearch, type ValidatorSearchResult, type ServiceSearchResult } from '../composables/useValidatorPerformance';
+import { useSupplierServiceSearch } from '../composables/useValidatorPerformance';
 
 const props = defineProps<{
   modelValue: boolean;
   initial: {
     domain?: string;
+    chain?: string;
     owner_address?: string;
     supplier_address?: string;
-    chain?: string;
+    supplier_status?: string;
     start_date: string;
     end_date: string;
   };
-  focusField?: 'owner' | 'supplier' | 'date';
+  focusField?: 'date';
 }>();
 
 const emit = defineEmits<{
@@ -33,11 +34,7 @@ watch(() => props.modelValue, (isOpen) => {
   if (isOpen && props.focusField) {
     // Use nextTick to ensure DOM is ready
     setTimeout(() => {
-      if (props.focusField === 'owner' && ownerInputRef.value) {
-        ownerInputRef.value.focus();
-      } else if (props.focusField === 'supplier' && supplierInputRef.value) {
-        supplierInputRef.value.focus();
-      } else if (props.focusField === 'date' && startDateInputRef.value) {
+      if (props.focusField === 'date' && startDateInputRef.value) {
         startDateInputRef.value.focus();
       }
     }, 150);
@@ -48,14 +45,11 @@ const router = useRouter();
 const route = useRoute();
 const chainStore = useBlockchain();
 const searchQuery = ref<string>('');
-const ownerAddress = ref<string>(props.initial?.owner_address || '');
-const supplierAddress = ref<string>(props.initial?.supplier_address || '');
 const start = ref<string>(props.initial?.start_date);
 const end = ref<string>(props.initial?.end_date);
+const supplierStatus = ref<string>(props.initial?.supplier_status || 'staked');
 
 // Template refs for focusing
-const ownerInputRef = ref<HTMLInputElement | null>(null);
-const supplierInputRef = ref<HTMLTextAreaElement | null>(null);
 const startDateInputRef = ref<HTMLInputElement | null>(null);
 
 // Get chain from route params or fallback to chainStore
@@ -63,132 +57,102 @@ const currentChain = computed(() => {
   return (route.params.chain as string) || chainStore?.current?.chainName || 'pocket-beta';
 });
 
-const { loading: searchLoading, error: searchError, results: searchResults, search: performSearch } = useValidatorServiceSearch(props.initial?.chain);
+// Initialize composable with default status
+const { loading: searchLoading, error: searchError, results: searchResults, search: performSearch } = useSupplierServiceSearch(props.initial?.chain, 20, 'staked');
+
+// Selected suppliers state
+const selectedSuppliers = ref<string[]>([]);
 
 // Debounce search
 let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 watch(searchQuery, (newQuery) => {
   if (searchTimeout) clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
-    performSearch(newQuery);
+    performSearch(newQuery, supplierStatus.value);
   }, 300);
 });
 
-// Clear search results when modal closes
+// Re-search when status changes
+watch(supplierStatus, (newStatus) => {
+  if (searchQuery.value && searchQuery.value.trim().length > 0) {
+    performSearch(searchQuery.value, newStatus);
+  }
+});
+
+// Initialize selected suppliers from initial filters
+watch(() => props.initial, (initial) => {
+  if (initial?.supplier_address) {
+    // Split comma-separated supplier addresses
+    selectedSuppliers.value = initial.supplier_address.split(',').map(addr => addr.trim()).filter(addr => addr);
+  } else {
+    selectedSuppliers.value = [];
+  }
+}, { immediate: true });
+
+// Keep search results when modal is open to allow selecting/deselecting
+// Only clear when modal closes
 watch(open, (isOpen) => {
   if (!isOpen) {
+    // Only clear search query and results when closing
+    // Keep selectedSuppliers so they persist when modal reopens
     searchQuery.value = '';
     searchResults.value = null;
+  } else {
+    // When modal opens, if we have selected suppliers but no search results,
+    // we could optionally restore the last search, but for now we'll just show selected suppliers
   }
 });
 
-function selectValidator(result: ValidatorSearchResult) {
-  // Navigate to validator page
-  // Use operator_address if available (standard validator identifier), otherwise use validator_account_address
-  const validatorAddress = result.operator_address || result.validator_account_address;
-  
-  // Close modal and navigate
-  open.value = false;
-  router.push(`/${currentChain.value}/staking/${validatorAddress}`);
-}
-
-function extractDomainFromUrl(jsonRpcUrl: string): string | null {
-  let urlString = jsonRpcUrl;
-  
-  // If json_rpc_url is a JSON string, try to parse it
-  if (urlString && (urlString.startsWith('{') || urlString.startsWith('['))) {
-    try {
-      const parsed = JSON.parse(urlString);
-      urlString = parsed.json_rpc_url || parsed.url || parsed.endpoint || urlString;
-    } catch {
-      // If parsing fails, try to extract URL from the JSON string
-      const urlMatch = urlString.match(/https?:\/\/[^\s"',}]+/);
-      if (urlMatch) {
-        urlString = urlMatch[0];
-      }
-    }
-  }
-  
-  // Extract domain from URL string
-  if (urlString) {
-    try {
-      const url = new URL(urlString);
-      return url.hostname.replace(/^www\./, '');
-    } catch {
-      const match = urlString.match(/https?:\/\/(?:www\.)?([^\/\s"',}]+)/);
-      if (match && match[1]) {
-        return match[1].replace(/^www\./, '').split(':')[0]; // Remove port if present
-      }
-    }
-  }
-  
-  return null;
-}
-
-function selectDomain(domain: string) {
-  // Find all services that match this domain
-  const matchingServices = searchResults.value?.services?.filter(service => {
-    const serviceDomain = extractDomainFromUrl(service.json_rpc_url);
-    if (!serviceDomain) return false;
-    return serviceDomain === domain || serviceDomain.replace('www.', '') === domain.replace('www.', '');
-  }) || [];
-  
-  // Collect all unique supplier addresses from matching services
-  const allSuppliers = new Set<string>();
-  matchingServices.forEach(service => {
-    service.supplier_operator_addresses.forEach(addr => {
-      if (addr) allSuppliers.add(addr);
-    });
+function selectOwner(ownerAddress: string) {
+  emit('apply', {
+    owner_address: ownerAddress,
+    supplier_address: undefined, // Clear supplier filter when selecting owner
+    supplier_status: supplierStatus.value,
+    start_date: start.value,
+    end_date: end.value,
   });
-  
-  // Set supplier addresses (unique, comma-separated)
-  supplierAddress.value = Array.from(allSuppliers).join(',');
-  
-  // Clear owner filter when selecting domain (per API best practices)
-  ownerAddress.value = '';
+  selectedSuppliers.value = []; // Clear selected suppliers when selecting owner
   searchQuery.value = '';
   searchResults.value = null;
+  open.value = false;
 }
 
-// Extract unique domains from services
-const uniqueDomains = computed(() => {
-  if (!searchResults.value?.services || searchResults.value.services.length === 0) {
-    return [];
+function toggleSupplierSelection(operatorAddress: string) {
+  const index = selectedSuppliers.value.indexOf(operatorAddress);
+  if (index > -1) {
+    selectedSuppliers.value.splice(index, 1);
+  } else {
+    selectedSuppliers.value.push(operatorAddress);
   }
-  
-  const domainSet = new Set<string>();
-  
-  searchResults.value.services.forEach(service => {
-    const domain = extractDomainFromUrl(service.json_rpc_url);
-    if (domain) {
-      domainSet.add(domain);
-    }
-  });
-  
-  return Array.from(domainSet).sort();
-});
-
-// Get unique supplier count for a domain
-function getDomainSupplierCount(domain: string): number {
-  if (!searchResults.value?.services) return 0;
-  
-  // Find all services matching this domain
-  const matchingServices = searchResults.value.services.filter(s => {
-    const serviceDomain = extractDomainFromUrl(s.json_rpc_url);
-    if (!serviceDomain) return false;
-    return serviceDomain === domain || serviceDomain.replace('www.', '') === domain.replace('www.', '');
-  });
-  
-  // Collect all unique supplier addresses
-  const uniqueSuppliers = new Set<string>();
-  matchingServices.forEach(service => {
-    service.supplier_operator_addresses.forEach(addr => {
-      if (addr) uniqueSuppliers.add(addr);
-    });
-  });
-  
-  return uniqueSuppliers.size;
+  // Don't clear search results - keep them so user can continue selecting/deselecting
 }
+
+function selectAllSuppliers() {
+  if (searchResults.value?.supplier_operator_addresses) {
+    const allSelected = searchResults.value.supplier_operator_addresses.every(addr => 
+      selectedSuppliers.value.includes(addr)
+    );
+    
+    if (allSelected) {
+      // Deselect all
+      selectedSuppliers.value = selectedSuppliers.value.filter(addr => 
+        !searchResults.value?.supplier_operator_addresses.includes(addr)
+      );
+    } else {
+      // Select all from current results
+      searchResults.value.supplier_operator_addresses.forEach(addr => {
+        if (!selectedSuppliers.value.includes(addr)) {
+          selectedSuppliers.value.push(addr);
+        }
+      });
+    }
+  }
+}
+
+function isSupplierSelected(operatorAddress: string): boolean {
+  return selectedSuppliers.value.includes(operatorAddress);
+}
+
 
 function preset(days: number | null) {
   if (days === null) {
@@ -204,12 +168,18 @@ function preset(days: number | null) {
 }
 
 function apply() {
-  const filters = {
-    owner_address: ownerAddress.value || undefined,
-    supplier_address: supplierAddress.value || undefined,
+  const filters: any = {
     start_date: start.value,
     end_date: end.value,
+    supplier_status: supplierStatus.value,
   };
+  
+  // If suppliers are selected, apply them as comma-separated
+  if (selectedSuppliers.value.length > 0) {
+    filters.owner_address = undefined; // Clear owner filter when selecting suppliers
+    filters.supplier_address = selectedSuppliers.value.join(',');
+  }
+  
   emit('apply', filters);
   emit('update:modelValue', false);
 }
@@ -268,15 +238,15 @@ function isPresetActive(days: number | null): boolean {
   <Teleport to="body">
     <div 
       v-if="props.modelValue" 
-      class="modal modal-open" 
+      class="modal modal-open backdrop-blur-sm" 
       @click.self="cancel"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div class="modal-box dark:bg-base-100 bg-base-200 w-11/12 max-w-6xl" @click.stop>
+      <div class="modal-box dark:bg-[#0f1419] bg-[#ffffff] w-11/12 max-w-6xl" @click.stop>
       <div class="flex items-center justify-between mb-4">
-        <h3 id="modal-title" class="font-bold text-lg">Validator Filters</h3>
+        <h3 id="modal-title" class="font-bold text-lg">Supplier Filters</h3>
         <button class="btn btn-sm btn-circle" @click="cancel" type="button" aria-label="Close modal">
           <Icon icon="mdi:close" />
         </button>
@@ -284,18 +254,33 @@ function isPresetActive(days: number | null): boolean {
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="md:col-span-2">
-          <label class="label text-xs">Search Validators or Services</label>
+          <div class="flex items-center justify-between mb-2">
+          <label class="label text-xs">Supplier Lookup</label>
+            <div class="flex items-center gap-2">
+              <label class="label text-xs">Status:</label>
+              <select 
+                v-model="supplierStatus" 
+                class="select select-bordered select-sm w-32"
+              >
+                <option value="staked">Staked</option>
+                <option value="unstaked">Unstaked</option>
+                <option value="unstake_requested">Unstake Requested</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+          </div>
           <div class="relative">
             <input 
               v-model="searchQuery" 
-              class="input input-bordered w-full shadow-sm" 
-              placeholder="Search by validator name, address, or service JSON-RPC URL..."
-              @focus="performSearch(searchQuery)"
+              class="input input-bordered w-full shadow-sm dark:bg-[#1a1f26]" 
+              placeholder="Search by owner address, operator address, or service URL/domain..."
+              @focus="performSearch(searchQuery, supplierStatus)"
             />
             <div v-if="searchLoading" class="absolute right-3 top-3">
               <span class="loading loading-spinner loading-xs"></span>
             </div>
             <div v-if="searchError" class="text-error text-xs mt-1">{{ searchError }}</div>
+            <div v-if="!searchError" class="text-gray-500 text-sm mt-1 mb-2">Enter an owner address to filter by all operators for that owner, or enter an operator address/service URL to find matching suppliers.</div>
             
             <!-- Search Results Dropdown -->
             <div 
@@ -304,37 +289,56 @@ function isPresetActive(days: number | null): boolean {
               @click.stop
             >
               <!-- No Results -->
-              <div v-if="(!searchResults.validators || searchResults.validators.length === 0) && uniqueDomains.length === 0" class="p-4 text-center text-sm text-base-content/60">
+              <div v-if="(!searchResults.owner_addresses || searchResults.owner_addresses.length === 0) && 
+                          (!searchResults.supplier_operator_addresses || searchResults.supplier_operator_addresses.length === 0)" 
+                   class="p-4 text-center text-sm text-base-content/60">
                 No results found
               </div>
               
-              <!-- Validator Results -->
-              <div v-if="searchResults.validators?.length > 0" class="p-2">
-                <div class="text-xs font-semibold text-base-content/70 mb-1 px-2">Validators</div>
+              <!-- Combined List with Type Indicators -->
+              <div class="p-2">
+                <!-- Owner Address Results -->
                 <div 
-                  v-for="validator in searchResults.validators" 
-                  :key="validator.validator_account_address"
-                  class="p-2 hover:bg-base-200 dark:hover:bg-base-300 rounded cursor-pointer transition-colors"
-                  @click.stop="selectValidator(validator)"
+                  v-for="ownerAddress in searchResults.owner_addresses" 
+                  :key="ownerAddress"
+                  class="p-2 hover:bg-base-200 dark:hover:bg-base-300 rounded cursor-pointer transition-colors flex items-start gap-2"
+                  @click.stop="selectOwner(ownerAddress)"
                 >
-                  <div class="font-medium">{{ validator.moniker || 'Unknown' }}</div>
-                  <div class="text-xs text-base-content/60 font-mono">{{ validator.validator_account_address }}</div>
-                  <div v-if="validator.operator_address" class="text-xs text-base-content/50 font-mono">{{ validator.operator_address }}</div>
+                  <span class="badge badge-sm badge-primary">OWNER</span>
+                  <div class="flex-1">
+                    <div class="text-xs text-base-content/60 font-mono">{{ ownerAddress }}</div>
+                    <div class="text-xs text-base-content/50">Click to view all operators for this owner</div>
+                  </div>
                 </div>
+                
+                <!-- Operator Address Results -->
+                <div v-if="searchResults.supplier_operator_addresses && searchResults.supplier_operator_addresses.length > 0" class="mb-2">
+                  <div class="flex items-center justify-between px-2 mb-1">
+                    <div class="text-xs font-semibold text-base-content/70">Operators</div>
+                    <button 
+                      class="btn btn-xs btn-ghost"
+                      @click.stop="selectAllSuppliers"
+                      type="button"
+                    >
+                      {{ searchResults.supplier_operator_addresses.every(addr => selectedSuppliers.includes(addr)) ? 'Deselect All' : 'Select All' }}
+                    </button>
               </div>
-              
-              <!-- Domain Results (from Services) -->
-              <div v-if="uniqueDomains.length > 0" class="p-2" :class="{ 'border-t border-base-300': searchResults.validators?.length > 0 }">
-                <div class="text-xs font-semibold text-base-content/70 mb-1 px-2">Domains</div>
-                <div 
-                  v-for="domain in uniqueDomains" 
-                  :key="domain"
-                  class="p-2 hover:bg-base-200 dark:hover:bg-base-300 rounded cursor-pointer transition-colors"
-                  @click.stop="selectDomain(domain)"
-                >
-                  <div class="font-medium">{{ domain }}</div>
-                  <div class="text-xs text-base-content/50">
-                    {{ getDomainSupplierCount(domain) }} supplier(s)
+                  <div 
+                    v-for="operatorAddress in searchResults.supplier_operator_addresses" 
+                    :key="operatorAddress"
+                    class="p-2 hover:bg-base-200 dark:hover:bg-base-300 rounded cursor-pointer transition-colors flex items-start gap-2"
+                    @click.stop="toggleSupplierSelection(operatorAddress)"
+                  >
+                    <input 
+                      type="checkbox" 
+                      :checked="isSupplierSelected(operatorAddress)"
+                      class="checkbox checkbox-sm mt-0.5"
+                      @click.stop="toggleSupplierSelection(operatorAddress)"
+                    />
+                    <span class="badge badge-sm badge-secondary">OPERATOR</span>
+                    <div class="flex-1">
+                      <div class="text-xs text-base-content/60 font-mono">{{ operatorAddress }}</div>
+                      <div class="text-xs text-base-content/50">Click to select/deselect</div>
                   </div>
                 </div>
               </div>
@@ -342,35 +346,31 @@ function isPresetActive(days: number | null): boolean {
           </div>
         </div>
 
-        <div>
-          <label class="label text-xs">Owner Address</label>
-          <div class="flex gap-2">
-            <input ref="ownerInputRef" v-model="ownerAddress" class="input input-bordered w-full font-mono flex-1 shadow-sm" placeholder="pokt1..." />
-            <button v-if="ownerAddress" class="btn btn-sm btn-ghost" @click="ownerAddress = ''">
+          <!-- Selected Suppliers Display -->
+          <div v-if="selectedSuppliers.length > 0" class="mt-4 border border-base-300 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold">Selected Suppliers ({{ selectedSuppliers.length }})</h4>
+              <button class="btn btn-xs btn-ghost" @click="selectedSuppliers = []" type="button">
               <Icon icon="mdi:close" />
+                Clear All
+              </button>
+            </div>
+            <div class="max-h-32 overflow-y-auto space-y-1">
+              <div 
+                v-for="supplier in selectedSuppliers" 
+                :key="supplier"
+                class="flex items-center justify-between p-2 bg-base-200 dark:bg-base-300 rounded text-xs"
+              >
+                <span class="font-mono text-base-content/80">{{ supplier }}</span>
+                <button 
+                  class="btn btn-xs btn-ghost p-0 h-auto min-h-0"
+                  @click="toggleSupplierSelection(supplier)"
+                  type="button"
+                >
+                  <Icon icon="mdi:close" class="text-xs" />
             </button>
           </div>
         </div>
-
-        <div>
-          <label class="label text-xs">Supplier Operator Address(es)</label>
-          <div class="flex gap-2">
-            <textarea 
-              ref="supplierInputRef"
-              v-model="supplierAddress" 
-              class="textarea textarea-bordered w-full font-mono flex-1 min-h-[100px] shadow-sm" 
-              placeholder="poktvaloper1... (comma-separated for multiple)"
-              rows="4"
-            ></textarea>
-            <button v-if="supplierAddress" class="btn btn-sm btn-ghost self-start" @click="supplierAddress = ''">
-              <Icon icon="mdi:close" />
-            </button>
-          </div>
-          <div class="text-xs text-base-content/60 mt-1">
-            <span v-if="supplierAddress && supplierAddress.includes(',')" class="text-warning">
-              Multiple suppliers selected - results will be aggregated
-            </span>
-            <span v-else>Multiple addresses can be comma-separated</span>
           </div>
         </div>
 
@@ -409,7 +409,16 @@ function isPresetActive(days: number | null): boolean {
               All Time
             </button>
           </div>
-          <div class="grid grid-cols-2 gap-2">
+        </div>
+
+        <div>
+          <label class="label text-xs">Group By</label>
+          <div class="flex items-center gap-3 text-sm">
+            <input type="radio" checked disabled /> <span>Day (fixed)</span>
+          </div>
+        </div>
+        <div>
+          <div class="grid grid-cols-1 gap-2">
             <div>
               <label class="label label-text text-xs py-1">Start Date</label>
               <input 
@@ -420,6 +429,11 @@ function isPresetActive(days: number | null): boolean {
                 @change="(e) => { const target = e.target as HTMLInputElement; if (target?.value) start = new Date(target.value).toISOString(); }"
               />
             </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="grid grid-cols-1 gap-2">
             <div>
               <label class="label label-text text-xs py-1">End Date</label>
               <input 
@@ -429,13 +443,6 @@ function isPresetActive(days: number | null): boolean {
                 @change="(e) => { const target = e.target as HTMLInputElement; if (target?.value) end = new Date(target.value).toISOString(); }"
               />
             </div>
-          </div>
-        </div>
-
-        <div>
-          <label class="label text-xs">Group By</label>
-          <div class="flex items-center gap-3 text-sm">
-            <input type="radio" checked disabled /> <span>Day (fixed)</span>
           </div>
         </div>
       </div>
@@ -453,6 +460,6 @@ function isPresetActive(days: number | null): boolean {
 <style scoped>
 .modal-box {
   width: 100%;
-  max-width: 50vw;
+  max-width: 600px;
 }
 </style>

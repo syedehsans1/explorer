@@ -95,13 +95,16 @@ export const useBaseStore = defineStore('baseStore', {
             sort_order?: 'asc' | 'desc';
         }) {
             try {
-                //fetch from the transaction service
-                const { fetchTransactions } = await import('@/libs/transactions');
-                const data = await fetchTransactions({
+                //fetch from the transaction service with fallback
+                const { fetchTransactionsWithFallback } = await import('@/libs/transactions');
+                const data = await fetchTransactionsWithFallback({
                     chain,
                     page: 1,
                     limit: this.pageSize,
                     ...filters
+                }, {
+                    chainStore: this.blockchain,
+                    baseStore: this
                 });
                 // Map ApiTransaction to TxLocal format
                 this.allTxs = (data.data || []).map((tx: any): TxLocal => ({

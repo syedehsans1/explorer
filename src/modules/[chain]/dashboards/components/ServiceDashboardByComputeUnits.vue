@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ref, onMounted, computed, watch } from 'vue';
+import { RouterLink } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import ApexCharts from 'vue3-apexcharts';
 import { useBlockchain, useFormatter } from '@/stores';
@@ -10,6 +11,7 @@ const props = defineProps<{
   filters?: {
     supplier_address?: string;
     owner_address?: string;
+    supplier_status?: string;
   };
   showTabs?: boolean;
   tabView?: 'summary' | 'chain' | 'performance' | 'reward-share';
@@ -22,10 +24,10 @@ const format = useFormatter();
 
 const getApiChainName = (chainName: string) => {
   const chainMap: Record<string, string> = {
-    'pocket-beta': 'pocket-testnet-beta',
+    'pocket-lego-testnet': 'pocket-lego-testnet',
     'pocket-mainnet': 'pocket-mainnet'
   };
-  return chainMap[chainName] || chainName || 'pocket-testnet-beta';
+  return chainMap[chainName] || chainName || 'pocket-lego-testnet';
 };
 
 const current = chainStore?.current?.chainName || props.chain || 'pocket-beta';
@@ -48,39 +50,40 @@ function shouldUsePost(params: URLSearchParams): boolean {
 
 // Helper function to make API request (GET or POST)
 async function fetchApi(url: string, params: URLSearchParams, body?: any): Promise<any> {
-  const isRewardsEndpoint = url.includes('/proof-submissions/rewards');
-  const isSummaryEndpoint = url.includes('/proof-submissions/summary');
-  const isValidatorsPerformanceEndpoint = url.includes('/validators/performance');
+  const isRewardsEndpoint = url.includes('/claims/rewards');
+  const isSummaryEndpoint = url.includes('/claims/summary');
+  const isClaimsEndpoint = url.includes('/claims') && !isRewardsEndpoint && !isSummaryEndpoint;
+  const isSuppliersPerformanceEndpoint = url.includes('/suppliers/performance');
   
   // Check if we have supplier_address parameter
   const hasSupplierAddress = params.has('supplier_address');
   const supplierAddressValue = hasSupplierAddress ? params.get('supplier_address') : null;
   const hasMultipleSuppliers = supplierAddressValue && supplierAddressValue.includes(',');
   
-  // For validators/performance endpoint: always use POST
-  // For rewards and summary endpoints: always use POST when supplier_address is present
-  // This ensures proper handling of supplier_addresses/operator_addresses array format
-  const shouldPost = isValidatorsPerformanceEndpoint || shouldUsePost(params) || body || 
-    ((isRewardsEndpoint || isSummaryEndpoint) && hasSupplierAddress);
+  // For suppliers/performance endpoint: always use POST when supplier_address is present
+  // For rewards and summary endpoints: always use POST when supplier_address or owner_address is present
+  // This ensures proper handling of supplier_addresses array format
+  const hasOwnerAddress = params.has('owner_address');
+  const shouldPost = isSuppliersPerformanceEndpoint || shouldUsePost(params) || body || 
+    ((isRewardsEndpoint || isSummaryEndpoint || isClaimsEndpoint) && (hasSupplierAddress || hasOwnerAddress));
   
   if (shouldPost) {
     // Use POST with request body
     const postBody: any = {};
     params.forEach((value, key) => {
-      // For validators/performance endpoint, convert supplier_address to operator_addresses
-      if (isValidatorsPerformanceEndpoint && key === 'supplier_address') {
+      // For suppliers/performance endpoint, handle supplier_address
+      if (isSuppliersPerformanceEndpoint && key === 'supplier_address') {
         const trimmedValue = value.trim();
         if (trimmedValue.length > 0) {
-          // Split comma-separated addresses and convert to operator_addresses array
+          // Split comma-separated addresses and convert to supplier_address array
           const addresses = trimmedValue.split(',').map((addr: string) => addr.trim()).filter((addr: string) => addr.length > 0);
           if (addresses.length > 0) {
-            postBody.operator_addresses = addresses;
+            postBody.supplier_address = addresses; // POST endpoint expects array
           }
         }
-        // Do NOT include supplier_address when using operator_addresses
       }
-      // For rewards and summary endpoints, handle supplier_address specially
-      else if ((isRewardsEndpoint || isSummaryEndpoint) && key === 'supplier_address') {
+      // For rewards, summary, and claims endpoints, handle supplier_address specially
+      else if ((isRewardsEndpoint || isSummaryEndpoint || isClaimsEndpoint) && key === 'supplier_address') {
         // Check if value contains comma (multiple addresses)
         const trimmedValue = value.trim();
         if (trimmedValue.includes(',')) {
@@ -95,10 +98,14 @@ async function fetchApi(url: string, params: URLSearchParams, body?: any): Promi
           postBody.supplier_address = trimmedValue;
         }
       } else {
+        // Include all other parameters (owner_address, status, chain, start_date, end_date, service_id, application_address, etc.)
         postBody[key] = value;
       }
     });
     if (body) Object.assign(postBody, body);
+        
+    // Debug: Log the POST body to verify filters are included
+    // console.log('POST request to', url, 'with body:', postBody);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -117,46 +124,46 @@ async function fetchApi(url: string, params: URLSearchParams, body?: any): Promi
   }
 }
 
-interface ProofSubmission {
+interface Claim {
   id: number;
-  transaction_hash: string;
-  block_height: string;
-  timestamp: string;
   supplier_operator_address: string;
   application_address: string;
   service_id: string;
   session_id: string;
+  session_start_block_height: string;
   session_end_block_height: string;
+  root_hash: string;
+  proof: string | null;
+  status: string;
+  timestamp: string;
+  chain: string;
   claim_proof_status_int: number;
   claimed_upokt: string;
-  claimed_upokt_amount: string;
-  num_claimed_compute_units: string;
-  num_estimated_compute_units: string;
-  num_relays: string;
-  compute_unit_efficiency: string;
-  reward_per_relay: string;
-  msg_index: number;
+  claimed_upokt_amount: number;
+  num_claimed_compute_units: number;
+  num_estimated_compute_units: number;
+  num_relays: number;
+  compute_unit_efficiency: number;
+  reward_per_relay: number;
   created_at: string;
 }
 
 interface RewardAnalytics {
-  supplier_operator_address: string;
-  application_address: string;
   service_id: string;
-  hour_bucket: string;
-  submission_count: number;
+  chain: string;
+  total_claims: number;
   total_rewards_upokt: number;
   total_relays: number;
   total_claimed_compute_units: number;
   total_estimated_compute_units: number;
   avg_efficiency_percent: number;
   avg_reward_per_relay: number;
-  max_reward_per_submission: number;
-  min_reward_per_submission: number;
+  max_reward_per_claim: number;
+  min_reward_per_claim: number;
 }
 
 interface SummaryStats {
-  total_submissions: string;
+  total_claims: string;
   unique_suppliers: string;
   unique_applications: string;
   unique_services: string;
@@ -166,8 +173,8 @@ interface SummaryStats {
   total_estimated_compute_units: string;
   avg_efficiency_percent: string;
   avg_reward_per_relay: string;
-  first_submission: string;
-  last_submission: string;
+  first_claim: string;
+  last_claim: string;
 }
 
 interface TopServiceByComputeUnits {
@@ -196,7 +203,7 @@ interface TopServiceByPerformance {
 
 const loading = ref(false);
 const summaryStats = ref<SummaryStats | null>(null);
-const submissions = ref<ProofSubmission[]>([]);
+const claims = ref<Claim[]>([]);
 const rewardAnalytics = ref<RewardAnalytics[]>([]);
 const currentPage = ref(1);
 const currentPages = ref(1);
@@ -204,6 +211,14 @@ const itemsPerPage = ref(25);
 const itemsPerPages = ref(10); // For performance tab
 const itemPerPage = ref(10);
 const totalPages = ref(0);
+const rewardCurrentPage = ref(1);
+const rewardItemsPerPage = ref(10); // ya jo dropdown se aa raha
+const rewardTotalItems = computed(() => topServicesByPerformance.value.length);
+
+const rewardTotalPages = computed(() =>
+  Math.ceil(rewardTotalItems.value / rewardItemsPerPage.value)
+);
+
 const selectedService = ref('');
 const selectedSupplier = ref('');
 const selectedApplication = ref('');
@@ -211,14 +226,20 @@ const startDate = ref('');
 const endDate = ref('');
 const uniqueServices = ref(['iotex', 'avax', 'blast', 'fuse']);
 
+// PAGINATION FOR SERVICE REWARDS TABLE - YEH NAYA ADD KIYA HAI
+const serviceRewardsCurrentPage = ref(1);
+const serviceRewardsItemsPerPage = ref(25);
+const serviceRewardsTotalCount = ref(0);
+const serviceRewardsTotalPagesFromApi = ref(0);
+
 const topServicesByComputeUnits = ref<TopServiceByComputeUnits[]>([]);
 const topServicesByPerformance = ref<TopServiceByPerformance[]>([]);
 const totalComputeUnits = ref(0);
 const loadingTopServices = ref(false);
 const loadingPerformanceTable = ref(false);
-const topServicesLimit = ref(10);
-const topServicesDays = ref(7);
-const performanceDays = ref(7);
+const topServicesLimit = ref(20);
+const topServicesDays = ref(30);
+const performanceDays = ref(30);
 
 // Reward Share tab data - New structures
 interface RewardShareEntry {
@@ -268,7 +289,7 @@ interface RewardTrendPoint {
 }
 
 interface ServiceRewardBreakdown {
-  validator: {
+  supplier: {
     operator_address: string;
     moniker: string | null;
   };
@@ -316,7 +337,7 @@ const growthRates = ref({ dayOverDay: 0, weekOverWeek: 0, monthOverMonth: 0 });
 interface ServiceReward {
   service_id: string;
   chain: string;
-  total_submissions: number;
+  total_claims: number;
   total_rewards_upokt: number;
   total_relays: number;
   total_claimed_compute_units: number;
@@ -325,6 +346,8 @@ interface ServiceReward {
   avg_reward_per_relay: number;
   max_reward_per_submission: number;
   min_reward_per_submission: number;
+  supplier_operator_address: string;
+  application_address: string;
 }
 const serviceRewards = ref<ServiceReward[]>([]);
 const loadingServiceRewards = ref(false);
@@ -431,6 +454,30 @@ const rewardShareChartOptions = computed(() => ({
 // Reward Share Distribution Chart
 const rewardShareDistributionChartSeries = computed(() => {
   return rewardShareDistribution.value.map(entry => entry.share_percent);
+});
+
+// COMPUTED PROPERTY - API se already paginated data aa raha hai
+const paginatedServiceRewards = computed(() => {
+  return serviceRewards.value; // API already returns paginated data
+});
+
+const serviceRewardsTotalPages = computed(() => {
+  return serviceRewardsTotalPagesFromApi.value; // Use total pages from API
+});
+
+// Watch for pagination changes and reload data
+watch(serviceRewardsItemsPerPage, () => {
+  if (serviceRewardsCurrentPage.value === 1) {
+    // Already on page 1, just reload
+    loadServiceRewards();
+  } else {
+    // Reset to page 1 (this will trigger the currentPage watcher)
+    serviceRewardsCurrentPage.value = 1;
+  }
+});
+
+watch(serviceRewardsCurrentPage, () => {
+  loadServiceRewards(); // Reload data when page changes
 });
 
 const rewardShareDistributionChartOptions = computed(() => {
@@ -602,6 +649,7 @@ async function loadSummaryStats() {
     const supplierFilter = props.filters?.supplier_address || selectedSupplier.value;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
+    if (props.filters?.supplier_status) params.append('status', props.filters.supplier_status);
     if (selectedApplication.value) params.append('application_address', selectedApplication.value);
     
     // Add date filters from props if available
@@ -610,7 +658,7 @@ async function loadSummaryStats() {
     if (dateStart) params.append('start_date', dateStart);
     if (dateEnd) params.append('end_date', dateEnd);
     
-    const data = await fetchApi('/api/v1/proof-submissions/summary', params);
+    const data = await fetchApi('/api/v1/claims/summary', params);
       summaryStats.value = data.data;
     
     // Load comparison data if filters are provided
@@ -637,39 +685,50 @@ async function loadServiceRewards() {
     const supplierFilter = props.filters?.supplier_address || selectedSupplier.value;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
+    if (props.filters?.supplier_status) params.append('status', props.filters.supplier_status);
     if (selectedApplication.value) params.append('application_address', selectedApplication.value);
     if (selectedService.value) params.append('service_id', selectedService.value);
     
-    // Add date filters from props if available, otherwise use default (last 7 days)
+    // ✅ FIXED: Use props dates or default to 30 days
     const dateStart = props.startDate || startDate.value;
     const dateEnd = props.endDate || endDate.value;
     if (dateStart && dateEnd) {
       params.append('start_date', dateStart);
       params.append('end_date', dateEnd);
     } else {
-      // Default to last 7 days
+      // ✅ Default to last 30 days (not 6 days)
       const end = new Date();
-      const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+      end.setHours(23, 59, 59, 999);
+      const start = new Date(end);
+      start.setDate(start.getDate() - 29); // 30 days total
+      start.setHours(0, 0, 0, 0);
       params.append('start_date', start.toISOString());
       params.append('end_date', end.toISOString());
     }
     
-    params.append('limit', '100');
-    params.append('page', '1');
-    
-    const data = await fetchApi('/api/v1/proof-submissions/rewards', params);
+    params.append('limit', String(serviceRewardsItemsPerPage.value));
+    params.append('page', String(serviceRewardsCurrentPage.value));
+
+    const data = await fetchApi('/api/v1/claims/rewards', params);
+
+    // Store meta information from API
+    if (data.meta) {
+      serviceRewardsTotalCount.value = data.meta.total || 0;
+      serviceRewardsTotalPagesFromApi.value = data.meta.totalPages || 0;
+    }
+
     // Normalize the data to ensure numeric values
     serviceRewards.value = (data.data || []).map((item: any) => ({
       ...item,
-      total_submissions: Number(item.total_submissions) || 0,
+      total_claims: Number(item.total_claims) || 0,
       total_rewards_upokt: Number(item.total_rewards_upokt) || 0,
       total_relays: Number(item.total_relays) || 0,
       total_claimed_compute_units: Number(item.total_claimed_compute_units) || 0,
       total_estimated_compute_units: Number(item.total_estimated_compute_units) || 0,
       avg_efficiency_percent: Number(item.avg_efficiency_percent) || 0,
       avg_reward_per_relay: Number(item.avg_reward_per_relay) || 0,
-      max_reward_per_submission: Number(item.max_reward_per_submission) || 0,
-      min_reward_per_submission: Number(item.min_reward_per_submission) || 0,
+      max_reward_per_claim: Number(item.max_reward_per_claim) || 0,
+      min_reward_per_claim: Number(item.min_reward_per_claim) || 0,
     }));
   } catch (error: any) {
     console.error('Error loading service rewards:', error);
@@ -695,9 +754,26 @@ async function loadComparisonData() {
     networkAverages.value = network;
     topPerformers.value = top10;
 
-    // Calculate growth rates if we have reward analytics
-    if (rewardAnalytics.value.length > 0) {
-      const trends = calculateTrends(rewardAnalytics.value, true);
+    // Calculate growth rates from reward trends (daily data from supplier performance)
+    // Note: rewardAnalytics is not populated from Claims API, but we can use rewardTrends
+    // which is calculated from daily supplier performance data
+    if (rewardTrends.value.length > 0) {
+      // Convert RewardTrendPoint[] to PerformanceDataPoint[] format for calculateTrends
+      const performanceData = rewardTrends.value.map(trend => ({
+        bucket: trend.date,
+        supplier_operator_address: null,
+        owner_address: null,
+        moniker: null,
+        submissions: 0, // Not available in rewardTrends, set to 0
+        total_relays: trend.total_relays,
+        total_claimed_compute_units: trend.compute_units,
+        total_estimated_compute_units: trend.compute_units,
+        avg_efficiency_percent: trend.efficiency,
+        avg_reward_per_relay: trend.reward_per_relay,
+        unique_applications: 0,
+        unique_services: 0
+      }));
+      const trends = calculateTrends(performanceData, false); // false = daily, not hourly
       growthRates.value = calculateGrowthRates(trends);
     }
   } catch (error) {
@@ -713,8 +789,8 @@ const comparisonMetrics = computed(() => {
     return null;
   }
 
-  const supplierRewards = parseFloat(summaryStats.value.total_rewards_upokt) / parseFloat(summaryStats.value.total_submissions || '1');
-  const supplierRelays = parseFloat(summaryStats.value.total_relays) / parseFloat(summaryStats.value.total_submissions || '1');
+  const supplierRewards = parseFloat(summaryStats.value.total_rewards_upokt) / parseFloat(summaryStats.value.total_claims || '1');
+  const supplierRelays = parseFloat(summaryStats.value.total_relays) / parseFloat(summaryStats.value.total_claims || '1');
   const supplierEfficiency = parseFloat(summaryStats.value.avg_efficiency_percent);
 
   let networkRewards = 0;
@@ -744,7 +820,6 @@ const comparisonMetrics = computed(() => {
   const top10RelaysDiff = top10Relays > 0 ? ((supplierRelays - top10Relays) / top10Relays) * 100 : 0;
   const top10EfficiencyDiff = supplierEfficiency - top10Efficiency;
 
-  // Calculate percentile (rough estimate)
   const isTop10 = top10Relays > 0 && supplierRelays >= top10Relays * 0.9;
   const percentile = isTop10 ? 'Top 10%' : top10Relays > 0 ? `${Math.max(10, Math.min(90, 90 - (top10RelaysDiff / top10Relays) * 100)).toFixed(0)}%` : 'N/A';
 
@@ -761,8 +836,25 @@ const comparisonMetrics = computed(() => {
 });
 
 function updateCharts() {
-  const sorted = [...rewardAnalytics.value].sort((a, b) => new Date(a.hour_bucket).getTime() - new Date(b.hour_bucket).getTime());
-  const labels = sorted.map(d => new Date(d.hour_bucket).toLocaleString());
+  // Note: Claims API rewards endpoint provides service-aggregated data, not hourly breakdowns
+  // rewardAnalytics is not populated from Claims API, so charts will be empty
+  if (rewardAnalytics.value.length === 0) {
+    rewardsChartSeries.value = [{ name: 'Total Rewards (POKT)', data: [] }];
+    efficiencyChartSeries.value = [{ name: 'Efficiency %', data: [] }];
+    relaysChartSeries.value = [{ name: 'Total Relays', data: [] }];
+    rewardsChartOptions.value = { ...rewardsChartOptions.value, xaxis: { ...rewardsChartOptions.value.xaxis, categories: [] } };
+    return;
+  }
+  const sorted = [...rewardAnalytics.value].sort((a, b) => {
+    // Handle both hour_bucket (old format) and date-based sorting
+    const dateA = (a as any).hour_bucket ? new Date((a as any).hour_bucket).getTime() : new Date().getTime();
+    const dateB = (b as any).hour_bucket ? new Date((b as any).hour_bucket).getTime() : new Date().getTime();
+    return dateA - dateB;
+  });
+  const labels = sorted.map(d => {
+    const date = (d as any).hour_bucket ? new Date((d as any).hour_bucket) : new Date();
+    return date.toLocaleString();
+  });
   rewardsChartSeries.value = [{ name: 'Total Rewards (POKT)', data: sorted.map(d => d.total_rewards_upokt / 1000000) }];
   efficiencyChartSeries.value = [{ name: 'Efficiency %', data: sorted.map(d => d.avg_efficiency_percent) }];
   relaysChartSeries.value = [{ name: 'Total Relays', data: sorted.map(d => d.total_relays) }];
@@ -771,7 +863,7 @@ function updateCharts() {
   relaysChartOptions.value = { ...relaysChartOptions.value, xaxis: { ...relaysChartOptions.value.xaxis, categories: labels } };
 }
 
-async function loadProofSubmissions() {
+async function loadClaims() {
   loading.value = true;
   try {
     const params = new URLSearchParams();
@@ -781,18 +873,33 @@ async function loadProofSubmissions() {
     const supplierFilter = props.filters?.supplier_address || selectedSupplier.value;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
+    if (props.filters?.supplier_status) params.append('status', props.filters.supplier_status);
     if (selectedApplication.value) params.append('application_address', selectedApplication.value);
-    if (startDate.value) params.append('start_date', startDate.value);
-    if (endDate.value) params.append('end_date', endDate.value);
+    // Use date filters from props if available, otherwise use internal dates
+    const dateStart = props.startDate || startDate.value;
+    const dateEnd = props.endDate || endDate.value;
+    if (dateStart) params.append('start_date', dateStart);
+    if (dateEnd) params.append('end_date', dateEnd);
     params.append('page', currentPage.value.toString());
     params.append('limit', itemsPerPage.value.toString());
     
-    const data = await fetchApi('/api/v1/proof-submissions', params);
-      submissions.value = data.data || [];
+    const data = await fetchApi('/api/v1/claims', params);
+      // Normalize the data to ensure numeric values are numbers
+      claims.value = (data.data || []).map((item: any) => ({
+        ...item,
+        id: Number(item.id) || 0,
+        claim_proof_status_int: Number(item.claim_proof_status_int) || 0,
+        claimed_upokt_amount: Number(item.claimed_upokt_amount) || 0,
+        num_claimed_compute_units: Number(item.num_claimed_compute_units) || 0,
+        num_estimated_compute_units: Number(item.num_estimated_compute_units) || 0,
+        num_relays: Number(item.num_relays) || 0,
+        compute_unit_efficiency: Number(item.compute_unit_efficiency) || 0,
+        reward_per_relay: Number(item.reward_per_relay) || 0,
+      }));
       totalPages.value = data.meta?.totalPages || 0;
   } catch (error: any) {
-    console.error('Error loading proof submissions:', error);
-    submissions.value = [];
+    console.error('Error loading claims:', error);
+    claims.value = [];
     totalPages.value = 0;
   } finally {
     loading.value = false;
@@ -803,18 +910,39 @@ function applyFilters() {
   currentPage.value = 1;
   currentPages.value = 1;
   loadSummaryStats();
-  loadProofSubmissions();
+  loadClaims();
 }
 
-function nextPage() { if (currentPage.value < totalPages.value) { currentPage.value++; loadProofSubmissions(); } }
-function prevPage() { if (currentPage.value > 1) { currentPage.value--; loadProofSubmissions(); } }
-function goToFirst() { currentPage.value = 1; loadProofSubmissions(); }
-function goToLast() { currentPage.value = totalPages.value; loadProofSubmissions(); }
+const rewardPaginatedTopServices = computed(() => {
+  const start = (rewardCurrentPage.value - 1) * rewardItemsPerPage.value;
+  const end = start + rewardItemsPerPage.value;
+  return topServicesByPerformance.value.slice(start, end);
+});
 
-function nPage() { if (currentPages.value < totalPages.value) { currentPages.value++; loadProofSubmissions(); } }
-function pPage() { if (currentPages.value > 1) { currentPages.value--; loadProofSubmissions(); } }
-function gTFirst() { currentPages.value = 1; loadProofSubmissions(); }
-function gTLast() { currentPages.value = totalPages.value; loadProofSubmissions(); }
+function goToFirstReward() { rewardCurrentPage.value = 1; }
+function goToLastReward() { rewardCurrentPage.value = rewardTotalPages.value; }
+function goToPrevReward() { if (rewardCurrentPage.value > 1) rewardCurrentPage.value--; }
+function goToNextReward() { if (rewardCurrentPage.value < rewardTotalPages.value) rewardCurrentPage.value++; }
+
+
+function nextPage() { if (currentPage.value < totalPages.value) { currentPage.value++; loadClaims(); } }
+function prevPage() { if (currentPage.value > 1) { currentPage.value--; loadClaims(); } }
+function goToFirst() { currentPage.value = 1; loadClaims(); }
+function goToLast() { currentPage.value = totalPages.value; loadClaims(); }
+
+function nPage() { if (currentPages.value < totalPages.value) { currentPages.value++; loadClaims(); } }
+function pPage() { if (currentPages.value > 1) { currentPages.value--; loadClaims(); } }
+function gTFirst() { currentPages.value = 1; loadClaims(); }
+function gTLast() { currentPages.value = totalPages.value; loadClaims(); }
+
+const startItem = computed(() =>
+  rewardTotalItems.value === 0 ? 0 : (rewardCurrentPage.value - 1) * rewardItemsPerPage.value + 1
+);
+
+const endItem = computed(() =>
+  Math.min(rewardCurrentPage.value * rewardItemsPerPage.value, rewardTotalItems.value)
+);
+
 
 async function loadTopServicesByComputeUnits() {
   loadingTopServices.value = true;
@@ -843,7 +971,8 @@ async function loadTopServicesByPerformance() {
   loadingPerformanceTable.value = true;
   try {
     const params = new URLSearchParams();
-    params.append('limit', itemsPerPages.value.toString());
+    // params.append('limit', itemsPerPages.value.toString());
+    params.append('limit', rewardItemsPerPage.value.toString());
     params.append('days', performanceDays.value.toString());
     params.append('chain', apiChainName.value);
     // Add filter support
@@ -862,6 +991,7 @@ async function loadTopServicesByPerformance() {
     totalComputeUnits.value = 0;
   } finally {
     loadingPerformanceTable.value = false;
+    rewardCurrentPage.value = 1;
   }
 }
 
@@ -872,10 +1002,13 @@ async function loadRewardShareData() {
     const dateStart = props.startDate || rewardShareDateRange.value.start;
     const dateEnd = props.endDate || rewardShareDateRange.value.end;
     
-    // Set default date range (last 7 days) if neither is available
+    // ✅ FIXED: Default to 30 days if no dates
     if (!dateStart || !dateEnd) {
       const end = new Date();
-      const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+      end.setHours(23, 59, 59, 999);
+      const start = new Date(end);
+      start.setDate(start.getDate() - 29); // 30 days
+      start.setHours(0, 0, 0, 0);
       rewardShareDateRange.value.start = start.toISOString();
       rewardShareDateRange.value.end = end.toISOString();
     }
@@ -893,13 +1026,15 @@ async function loadRewardShareData() {
       return;
     }
 
-    // Prepare POST request parameters
+    // Prepare POST request parameters    
     const paramsTotal = new URLSearchParams();
     paramsTotal.append('chain', apiChainName.value);
     paramsTotal.append('group_by', 'total');
     if (dateStart) paramsTotal.append('start_date', dateStart);
     if (dateEnd) paramsTotal.append('end_date', dateEnd);
     if (supplierFilter) paramsTotal.append('supplier_address', supplierFilter);
+    if (props.filters?.owner_address) paramsTotal.append('owner_address', props.filters.owner_address);
+    if (props.filters?.supplier_status) paramsTotal.append('status', props.filters.supplier_status);
     paramsTotal.append('limit', '1000');
 
     const paramsDaily = new URLSearchParams();
@@ -908,28 +1043,27 @@ async function loadRewardShareData() {
     if (dateStart) paramsDaily.append('start_date', dateStart);
     if (dateEnd) paramsDaily.append('end_date', dateEnd);
     if (supplierFilter) paramsDaily.append('supplier_address', supplierFilter);
+    if (props.filters?.owner_address) paramsDaily.append('owner_address', props.filters.owner_address);
+    if (props.filters?.supplier_status) paramsDaily.append('status', props.filters.supplier_status);
     paramsDaily.append('limit', '1000');
     
     // Fetch both total and daily data in parallel using POST
     const [totalData, dailyData] = await Promise.all([
-      fetchApi('/api/v1/validators/performance', paramsTotal),
-      fetchApi('/api/v1/validators/performance', paramsDaily)
+      fetchApi('/api/v1/suppliers/performance', paramsTotal),
+      fetchApi('/api/v1/suppliers/performance', paramsDaily)
     ]);
     
     const totalPerformanceData = totalData.data || [];
     const dailyPerformanceData = dailyData.data || [];
-    const validatorsMetadata = totalData.validators || [];
+    const supplierMetadata = totalData.supplier || null;
 
-    // Create validator metadata map for quick lookup
-    const validatorMap = new Map<string, any>();
-    validatorsMetadata.forEach((validator: any) => {
-      validatorMap.set(validator.operator_address, validator);
-    });
+    // Note: For list endpoint, supplier metadata is not included in response
+    // Individual supplier metadata is only available in detail endpoint
 
     // Process total performance data
     const supplierMap = new Map<string, {
       rewards: number;
-      submissions: number;
+      claims: number;
       relays: number;
       owner: string | null;
       efficiency: number;
@@ -937,7 +1071,7 @@ async function loadRewardShareData() {
       applications: number;
       services: number;
       reward_per_relay: number;
-      validator: any;
+      supplier: any;
     }>();
 
     totalPerformanceData.forEach((item: any) => {
@@ -947,12 +1081,12 @@ async function loadRewardShareData() {
       const rewards = (item.total_relays || 0) * avgRewardPerRelay; // in upokt
       const supplier = item.supplier_operator_address;
       const owner = item.owner_address;
-      const validator = validatorMap.get(supplier);
+      const supplierMetadata = supplierMap.get(supplier);
       
       if (supplier) {
         supplierMap.set(supplier, {
           rewards,
-          submissions: item.submissions || 0,
+          claims: item.total_claims || 0,
           relays: item.total_relays || 0,
           owner: owner || null,
           efficiency: item.avg_efficiency_percent || 0,
@@ -960,7 +1094,7 @@ async function loadRewardShareData() {
           applications: item.unique_applications || 0,
           services: item.unique_services || 0,
           reward_per_relay: avgRewardPerRelay,
-          validator: validator || null
+          supplier: supplierMetadata || null
         });
       }
     });
@@ -977,14 +1111,14 @@ async function loadRewardShareData() {
         if (data.owner === props.filters?.owner_address) {
           rewardShareEntries.push({
             account: supplier,
-            moniker: data.validator?.moniker || null,
+            moniker: data.supplier?.moniker || null,
             total_rewards: data.rewards / 1000000,
             share_percent: totalRewardsUpokt > 0 ? (data.rewards / totalRewardsUpokt) * 100 : 0,
             total_relays: data.relays,
             efficiency: data.efficiency,
             compute_units: data.compute_units,
             nodes: 1,
-            status: data.validator?.status || null
+            status: data.supplier?.status || null
           });
         }
       });
@@ -996,7 +1130,6 @@ async function loadRewardShareData() {
         relays: number;
         efficiency: number;
         compute_units: number;
-        validators: any[];
       }>();
       
       supplierMap.forEach((data, supplier) => {
@@ -1006,14 +1139,12 @@ async function loadRewardShareData() {
           suppliers: new Set(),
           relays: 0,
           efficiency: 0,
-          compute_units: 0,
-          validators: []
+          compute_units: 0
         };
         existing.rewards += data.rewards;
         existing.suppliers.add(supplier);
         existing.relays += data.relays;
         existing.compute_units += data.compute_units;
-        if (data.validator) existing.validators.push(data.validator);
         ownerMap.set(owner, existing);
       });
 
@@ -1025,14 +1156,14 @@ async function loadRewardShareData() {
 
         rewardShareEntries.push({
           account: owner,
-          moniker: data.validators[0]?.moniker || null,
+          moniker: null, // Supplier metadata not available in list endpoint
           total_rewards: data.rewards / 1000000,
           share_percent: totalRewardsUpokt > 0 ? (data.rewards / totalRewardsUpokt) * 100 : 0,
           total_relays: data.relays,
           efficiency: avgEfficiency,
           compute_units: data.compute_units,
           nodes: data.suppliers.size,
-          status: data.validators[0]?.status || null
+          status: null // Supplier metadata not available in list endpoint
         });
       });
     }
@@ -1044,7 +1175,7 @@ async function loadRewardShareData() {
       earners.push({
         rank: 0, // Will be set after sorting
         operator_address: supplier,
-        moniker: data.validator?.moniker || null,
+        moniker: data.supplier?.moniker || null,
         total_rewards: data.rewards / 1000000,
         total_relays: data.relays,
         reward_per_relay: data.reward_per_relay,
@@ -1052,7 +1183,7 @@ async function loadRewardShareData() {
         compute_units: data.compute_units,
         applications: data.applications,
         services: data.services,
-        status: data.validator?.status || null
+        status: data.supplier?.status || null
       });
     });
     earners.sort((a, b) => b.total_rewards - a.total_rewards);
@@ -1069,7 +1200,7 @@ async function loadRewardShareData() {
       
       efficiencyEntries.push({
         operator_address: supplier,
-        moniker: data.validator?.moniker || null,
+        moniker: data.supplier?.moniker || null,
         total_rewards: rewardsPOKT,
         reward_per_compute_unit: rewardPerComputeUnit,
         reward_per_relay: data.reward_per_relay,
@@ -1136,9 +1267,9 @@ async function loadRewardShareData() {
     const serviceBreakdowns: ServiceRewardBreakdown[] = [];
     supplierMap.forEach((data, supplier) => {
       serviceBreakdowns.push({
-        validator: {
+        supplier: {
           operator_address: supplier,
-          moniker: data.validator?.moniker || null
+          moniker: data.supplier?.moniker || null
         },
         services: [], // Service-level data not available from this endpoint
         total_rewards: data.rewards / 1000000,
@@ -1176,6 +1307,49 @@ watch([itemPerPage, performanceDays], () => {
   loadTopServicesByPerformance();
 });
 
+const safeNumber = (val: any, fallback = 0) => {
+  const num = Number(val)
+  return isNaN(num) ? fallback : num
+}
+
+const safeInt = (val: any, fallback = 0) => {
+  const num = parseInt(val)
+  return isNaN(num) ? fallback : num
+}
+
+const safeFloat = (val: any, fallback = 0) => {
+  const num = parseFloat(val)
+  return isNaN(num) ? fallback : num
+}
+
+const safePercent = (val: any, decimals = 2) => {
+  const num = parseFloat(val)
+  return isNaN(num) ? `0.${'0'.repeat(decimals)}%` : `${num.toFixed(decimals)}%`
+}
+
+const formatCompactAmount = (upokt: string | number) => {
+  const value = Number(upokt)
+
+  if (!value || isNaN(value)) return '0'
+
+  // upokt → POKT
+  const pokt = value / 1_000_000
+
+  if (pokt >= 1_000_000_000) {
+    return `${(pokt / 1_000_000_000).toFixed(2)}B`
+  }
+
+  if (pokt >= 1_000_000) {
+    return `${(pokt / 1_000_000).toFixed(2)}M`
+  }
+
+  if (pokt >= 1_000) {
+    return `${(pokt / 1_000).toFixed(2)}K`
+  }
+
+  return pokt.toFixed(2)
+}
+
 function formatNumber(num: number | string): string { return new Intl.NumberFormat().format(typeof num === 'string' ? parseInt(num) : num); }
 function formatComputeUnits(units: number | string): string {
   const value = typeof units === 'string' ? parseInt(units) : units;
@@ -1192,7 +1366,7 @@ function formatComputeUnits(units: number | string): string {
 // Watch for filter changes and reload data
 watch(() => props.filters, () => {
   loadSummaryStats();
-  loadProofSubmissions();
+  loadClaims();
   loadTopServicesByComputeUnits();
   loadTopServicesByPerformance();
   if (props.tabView === 'reward-share') {
@@ -1206,8 +1380,11 @@ watch(() => props.filters, () => {
 
 // Watch for date changes
 watch(() => [props.startDate, props.endDate], () => {
+  loadSummaryStats();
+  loadClaims();
+  loadTopServicesByComputeUnits();
+  loadTopServicesByPerformance();
   if (!props.tabView || props.tabView === 'summary') {
-    loadSummaryStats();
     loadServiceRewards();
   }
   if (props.tabView === 'reward-share') {
@@ -1223,7 +1400,7 @@ watch(() => props.tabView, (newTab) => {
 
 onMounted(() => {
   loadSummaryStats();
-  loadProofSubmissions();
+  loadClaims();
   loadTopServicesByComputeUnits();
   loadTopServicesByPerformance();
   if (props.tabView === 'reward-share') {
@@ -1234,7 +1411,7 @@ onMounted(() => {
 const perfCurrentPage = ref(1);
 watch(itemsPerPages, () => {
   perfCurrentPage.value = 1;
-  // reload remote data (already done by existing @change), local page reset only
+  // reload remote data (already done by existing @change), local page reset only  
 });
 const perfTotalPages = computed(() => {
   const total = topServicesByPerformance.value?.length || 0;
@@ -1271,9 +1448,9 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:file-document-multiple" class="text-sm" />
-            Submissions
+            Claims
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.total_submissions)) }}</div>
+          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.total_claims)) }}</div>
         </div>
         <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-secondary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
@@ -1301,7 +1478,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             <Icon icon="mdi:network" class="text-sm" />
             Total Relays
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.total_relays)) }}</div>
+          <div class="text-xl font-bold">{{ formatNumber(safeInt(summaryStats?.total_relays)) }}</div>
         </div>
         <div 
           class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg"
@@ -1311,7 +1488,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             Avg Efficiency
           </div>
           <div class="text-xl font-bold" :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'text-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'text-warning' : 'text-error'">
-            {{ parseFloat(summaryStats.avg_efficiency_percent).toFixed(2) }}%
+            {{ safePercent(summaryStats?.avg_efficiency_percent) }}
           </div>
         </div>
         <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
@@ -1319,9 +1496,9 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             <Icon icon="mdi:calculator" class="text-sm" />
             Compute Units
           </div>
-          <div class="text-xl font-bold">{{ formatComputeUnits(parseInt(summaryStats.total_claimed_compute_units)) }}</div>
+          <div class="text-xl font-bold">{{ formatComputeUnits(safeInt(summaryStats?.total_claimed_compute_units)) }}</div>
           <div class="text-xs text-secondary mt-1">
-            Est: {{ formatComputeUnits(parseInt(summaryStats.total_estimated_compute_units)) }}
+            Est: {{ formatComputeUnits(safeInt(summaryStats?.total_estimated_compute_units)) }}
           </div>
         </div>
         <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
@@ -1329,7 +1506,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             <Icon icon="mdi:currency-usd" class="text-sm" />
             Total Rewards
           </div>
-          <div class="text-xl font-bold text-success">{{ format.formatToken({ denom: 'upokt', amount: String(summaryStats.total_rewards_upokt) }) }}</div>
+          <div class="text-xl font-bold text-success">{{ formatCompactAmount(summaryStats.total_rewards_upokt) }} POKT</div>
           <div class="text-xs text-secondary mt-1">
             Avg/Relay: {{ format.formatToken({ denom: 'upokt', amount: String(summaryStats.avg_reward_per_relay || '0') }) }}
           </div>
@@ -1342,7 +1519,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
       <div class="flex items-center justify-between mb-3 ml-4 mr-4">
         <div class="text-base font-semibold text-main flex items-center gap-2">
           <Icon icon="mdi:chart-pie" class="text-lg" />
-          Rewards by Service ({{ serviceRewards.length }})
+          Rewards by Service ({{ serviceRewardsTotalCount }})
         </div>
       </div>
       <div class="bg-base-200 rounded-md overflow-auto h-[50vh]">
@@ -1357,18 +1534,36 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
             <tr class="border-b-[0px] text-sm font-semibold">
               <th>Service</th>
+              <th>Operator Address</th>
+              <th>Application Address</th>
               <th>Total Rewards</th>
               <th>Total Relays</th>
               <th>Avg Reward/Relay</th>
               <th>Compute Units</th>
               <th>Efficiency</th>
-              <th>Submissions</th>
+              <th>Claims</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="service in serviceRewards" :key="service.service_id" class="hover:bg-base-200 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+            <tr v-for="service in paginatedServiceRewards" :key="service.service_id" class="hover:bg-base-200 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
               <td class="dark:bg-base-200 bg-white">
-                <span class="badge badge-primary badge-sm">{{ service.service_id }}</span>
+                <span class="badge badge-primary h-8 text-xs leading-4 px-2">{{ service.service_id }}</span>
+              </td>
+              <td class="dark:bg-base-200 bg-white">
+                <RouterLink
+                  :to="`/${chainStore.chainName}/account/${service.supplier_operator_address}`"
+                  class="text-sm text-[#09279F] dark:invert font-medium hover:underline"
+                >
+                  {{ service.supplier_operator_address.substring(0, 12) }}...{{ service.supplier_operator_address.substring(service.supplier_operator_address.length - 7) }}
+                </RouterLink>
+              </td>
+              <td class="dark:bg-base-200 bg-white">
+                <RouterLink
+                  :to="`/${chainStore.chainName}/account/${service.application_address}`"
+                  class="text-sm text-[#09279F] dark:invert font-medium hover:underline"
+                >
+                  {{ service.application_address.substring(0, 12) }}...{{ service.application_address.substring(service.application_address.length - 7) }}
+                </RouterLink>
               </td>
               <td class="dark:bg-base-200 bg-white font-semibold text-success">
                 {{ format.formatToken({ denom: 'upokt', amount: String(service.total_rewards_upokt) }) }}
@@ -1391,21 +1586,76 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
                 </span>
               </td>
               <td class="dark:bg-base-200 bg-white">
-                {{ formatNumber(service.total_submissions) }}
+                {{ formatNumber(service.total_claims) }}
               </td>
             </tr>
           </tbody>
         </table>
       </div>
+
+      <!-- Pagination -->
+      <div class="flex justify-between items-center gap-4 my-6 px-6">
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-secondary">Show:</span>
+          <select v-model="serviceRewardsItemsPerPage" class="select select-bordered select-xs w-20">
+            <option :value="10">10</option>
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-600">
+            Showing {{ ((serviceRewardsCurrentPage - 1) * serviceRewardsItemsPerPage) + 1 }} to {{ Math.min(serviceRewardsCurrentPage * serviceRewardsItemsPerPage, serviceRewardsTotalCount) }} of {{ serviceRewardsTotalCount }} rewards
+          </span>
+
+          <div class="flex items-center gap-1">
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="serviceRewardsCurrentPage = 1"
+              :disabled="serviceRewardsCurrentPage === 1 || serviceRewardsTotalPages === 0"
+            >
+              First
+            </button>
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="serviceRewardsCurrentPage--"
+              :disabled="serviceRewardsCurrentPage === 1 || serviceRewardsTotalPages === 0"
+            >
+              &lt;
+            </button>
+
+            <span class="text-xs px-2">
+              Page {{ serviceRewardsCurrentPage }} of {{ serviceRewardsTotalPages }}
+            </span>
+
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="serviceRewardsCurrentPage++"
+              :disabled="serviceRewardsCurrentPage === serviceRewardsTotalPages || serviceRewardsTotalPages === 0"
+            >
+              &gt;
+            </button>
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="serviceRewardsCurrentPage = serviceRewardsTotalPages"
+              :disabled="serviceRewardsCurrentPage === serviceRewardsTotalPages || serviceRewardsTotalPages === 0"
+            >
+              Last
+            </button>
+          </div>
+        </div>  
+      </div>  
+
     </div>
 
-     <!-- Middle Section: Rewards Distribution Table (Large) - Show in Summary and Reward Share tabs -->
+    <!-- Middle Section: Rewards Distribution Table (Large) - Show in Summary and Reward Share tabs -->
     <div v-if="(!props.tabView || props.tabView === 'summary' || props.tabView === 'reward-share') && (props.filters?.supplier_address || props.filters?.owner_address)" class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
       <div class="flex items-center justify-between mb-3 ml-4 mr-4">
         <div class="text-base font-semibold text-main">Rewards Distribution ({{ topServicesByPerformance.length }})</div>
         <div class="flex justify-end gap-4">
           <!-- LIMIT DROPDOWN -->
-          <div class="flex items-center justify-end gap-2">
+          <!-- <div class="flex items-center justify-end gap-2">
             <span class="text-xs text-secondary"> Limit:</span>
             <select v-model="itemsPerPages" @change="loadTopServicesByPerformance()"  class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
               <option :value="10">10</option>
@@ -1413,7 +1663,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
               <option :value="30">30</option>
               <option :value="50">50</option>
             </select>
-          </div>
+          </div> -->
           <div class="flex items-center gap-2">
             <span class="text-xs text-secondary">Days:</span>
             <select v-model="performanceDays" @change="loadTopServicesByPerformance()" class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
@@ -1439,12 +1689,12 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
               <th>Service</th>
               <th>Compute Units</th>
               <th>Market Share</th>
-              <th>Submissions</th>
+              <th>Claims</th>
               <th>Efficiency</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="service in paginatedTopServices" :key="service.service_id" class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+            <tr v-for="service in rewardPaginatedTopServices" :key="service.service_id" class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
               <td class="dark:bg-base-200 bg-white font-bold">
                 <span class="badge badge-sm" :class="service.rank === 1 ? 'badge-primary' : service.rank === 2 ? 'badge-secondary' : service.rank === 3 ? 'badge-accent' : 'badge-ghost'">
                   #{{ service.rank }}
@@ -1475,20 +1725,74 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             </tr>
           </tbody>
         </table>
-        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex justify-between items-center gap-4 my-6 px-6">
+         <div class="flex items-center justify-end gap-2">
+            <span class="text-xs text-secondary"> Limit:</span>
+            <select v-model="itemsPerPages" @change="loadTopServicesByPerformance()"  class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="30">30</option>
+              <option :value="50">50</option>
+            </select>
+          </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-600">
+            Showing {{ ((rewardCurrentPage - 1) * rewardItemsPerPage) + 1 }} to {{ Math.min(rewardCurrentPage * rewardItemsPerPage, rewardTotalItems) }} of {{ rewardTotalPages }} rewards
+          </span>
+
+          <div class="flex items-center gap-1">
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="rewardCurrentPage = 1"
+              :disabled="rewardCurrentPage === 1 || rewardTotalPages === 0"
+            >
+              First
+            </button>
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="rewardCurrentPage--"
+              :disabled="rewardCurrentPage === 1 || rewardTotalPages === 0"
+            >
+              &lt;
+            </button>
+
+            <span class="text-xs px-2">
+              Page {{ rewardCurrentPage }} of {{ rewardTotalPages }}
+            </span>
+
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="rewardCurrentPage++"
+              :disabled="rewardCurrentPage === rewardTotalPages || rewardTotalPages === 0"
+            >
+              &gt;
+            </button>
+            <button
+              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+              @click="rewardCurrentPage = rewardTotalPages"
+              :disabled="rewardCurrentPage === rewardTotalPages || rewardTotalPages === 0"
+            >
+              Last
+            </button>
+          </div>
+        </div>  
+      </div> 
     </div>
     
 
     <!-- Bottom Section: 2 Columns (Merged Servicer/Producer/Performance + Services Chart) -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3 items-stretch" v-if="!props.tabView || props.tabView === 'summary'">
 
-      <!-- Proof Submissions Table (Compact) - Show in Summary tab only -->
+      <!-- Claims Table (Compact) - Show in Summary tab only -->
       <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" class="bg-[#ffffff] hover:bg-base-200 pt-2 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
         <div class="flex items-center justify-between mb-2 ml-3 mr-3">
-          <div class="text-sm font-semibold text-main">Proof Submissions</div>
+          <div class="text-sm font-semibold text-main">Claims</div>
           <div class="flex items-center gap-1">
             <span class="text-xs text-secondary">Show:</span>
-            <select v-model="itemsPerPage" @change="loadProofSubmissions()" class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
+            <select v-model="itemsPerPage" @change="loadClaims()" class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
               <option :value="25">25</option>
               <option :value="50">50</option>
               <option :value="100">100</option>
@@ -1517,34 +1821,34 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
                   </div>
                 </td>
               </tr>
-              <tr v-else-if="submissions.length === 0" class="text-center">
+              <tr v-else-if="claims.length === 0" class="text-center">
                 <td colspan="7" class="py-8">
-                  <div class="text-gray-500">No submissions found</div>
+                  <div class="text-gray-500">No claims found</div>
                 </td>
               </tr>
-              <tr v-for="submission in submissions" :key="submission.id" class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+              <tr v-for="claim in claims" :key="claim.id" class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
                 <td class="truncate dark:bg-base-200 bg-white dark:text-warning text-[#153cd8]" style="max-width:120px">
-                  <a :href="`#tx/${submission.transaction_hash}`" class="hover:underline text-xs">{{ submission.transaction_hash.substring(0, 12) }}...</a>
+                  <span class="hover:underline text-xs">{{ claim.session_id.substring(0, 12) }}...</span>
                 </td>
                 <td class="dark:bg-base-200 bg-white">
-                  <span class="badge badge-primary badge-xs">{{ submission.service_id }}</span>
+                  <span class="badge badge-primary h-8 text-xs leading-4 px-2">{{ claim.service_id }}</span>
                 </td>
-                <td class="truncate dark:bg-base-200 bg-white text-xs" style="max-width:120px">{{ submission.supplier_operator_address.substring(0, 12) }}...</td>
-                <td class="dark:bg-base-200 bg-white text-xs">{{ formatNumber(parseInt(submission.num_relays)) }}</td>
-                <td class="dark:bg-base-200 bg-white text-xs">{{ format.formatToken({ denom: 'upokt', amount: String(submission.claimed_upokt_amount) }) }}</td>
+                <td class="truncate dark:bg-base-200 bg-white text-xs" style="max-width:120px">{{ claim.supplier_operator_address.substring(0, 12) }}...</td>
+                <td class="dark:bg-base-200 bg-white text-xs">{{ formatNumber(claim.num_relays) }}</td>
+                <td class="dark:bg-base-200 bg-white text-xs">{{ format.formatToken({ denom: 'upokt', amount: String(claim.claimed_upokt_amount) }) }}</td>
                 <td class="dark:bg-base-200 bg-white">
-                  <span :class="parseFloat(submission.compute_unit_efficiency) >= 95 ? 'text-success' : parseFloat(submission.compute_unit_efficiency) >= 80 ? 'text-warning' : 'text-error'" class="text-xs">
-                    {{ parseFloat(submission.compute_unit_efficiency).toFixed(2) }}%
+                  <span :class="(claim.compute_unit_efficiency || 0) >= 95 ? 'text-success' : (claim.compute_unit_efficiency || 0) >= 80 ? 'text-warning' : 'text-error'" class="text-xs">
+                    {{ (Number(claim.compute_unit_efficiency) || 0).toFixed(2) }}%
                   </span>
                 </td>
-                <td class="dark:bg-base-200 bg-white text-xs">{{ new Date(submission.timestamp).toLocaleTimeString() }}</td>
+                <td class="dark:bg-base-200 bg-white text-xs">{{ claim.timestamp }}</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div class="flex justify-between items-center gap-4 my-6 px-2">
           <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, submissions.length) }} of {{ submissions.length }} submissions
+            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, claims.length) }} of {{ claims.length }} claims
           </span>
           <div class="flex items-center gap-1">
             <button
@@ -1693,7 +1997,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
                 <th>Service</th>
                 <th>Compute Units</th>
                 <th>Market Share</th>
-                <th>Submissions</th>
+                <th>Claims</th>
                 <th>Efficiency</th>
               </tr>
             </thead>
@@ -1767,7 +2071,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
               <tr class="border-b-[0px] text-sm font-semibold">
                 <th>Service ID</th>
                 <th>Compute Units</th>
-                <th>Submissions</th>
+                <th>Claims</th>
                 <th>Efficiency</th>
                 <th>Avg Reward/Relay</th>
               </tr>
@@ -1986,11 +2290,11 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
                 </tr>
                 <tr 
                   v-for="item in rewardsByService" 
-                  :key="item.validator.operator_address"
+                  :key="item.supplier.operator_address"
                   class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl"
                 >
                   <td class="dark:bg-base-200 bg-white font-mono text-xs truncate" style="max-width: 200px">
-                    {{ item.validator.moniker || item.validator.operator_address.substring(0, 12) + '...' }}
+                    {{ item.supplier.moniker || item.supplier.operator_address.substring(0, 12) + '...' }}
                   </td>
                   <td class="dark:bg-base-200 bg-white font-semibold text-success">{{ item.total_rewards.toFixed(4) }} POKT</td>
                   <td class="dark:bg-base-200 bg-white">

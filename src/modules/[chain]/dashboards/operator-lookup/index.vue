@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import { useBlockchain, useFormatter } from '@/stores';
 import ServiceDashboardByComputeUnits from '../components/ServiceDashboardByComputeUnits.vue';
-import ServiceDashboardByRelays from '../components/ServiceDashboardByRelays.vue';
 import SupplierComparisonCharts from '../components/SupplierComparisonCharts.vue';
 import SupplierTrendAnalysis from '../components/SupplierTrendAnalysis.vue';
 import SupplierInsights from '../components/SupplierInsights.vue';
@@ -19,25 +18,29 @@ const activeTab = ref<'summary' | 'chain' | 'performance' | 'analytics' | 'rewar
 // Map frontend chain names to API chain names
 const getApiChainName = (chainName: string) => {
   const chainMap: Record<string, string> = {
-    'pocket-beta': 'pocket-testnet-beta',
+    'pocket-lego-testnet': 'pocket-lego-testnet',
     'pocket-mainnet': 'pocket-mainnet'
   };
-  return chainMap[chainName] || chainName || 'pocket-testnet-beta';
+  return chainMap[chainName] || chainName || 'pocket-lego-testnet';
 };
 
 // Chain comes from route params (props.chain)
 const current = props.chain || chainStore?.current?.chainName || 'pocket-beta';
 const apiChainName = computed(() => getApiChainName(String(current)));
 
-// Defaults: last 7 days
+// ✅ FIXED: Default 30 days (taake data consistently mile)
 const end = new Date();
-const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+end.setHours(23, 59, 59, 999); // End of current day
+const start = new Date(end);
+start.setDate(start.getDate() - 29); // 30 days back (29 + today = 30)
+start.setHours(0, 0, 0, 0); // Start of that day
 
 const showFilters = ref(false);
-const focusField = ref<'owner' | 'supplier' | 'date' | undefined>(undefined);
+const focusField = ref<'date' | undefined>(undefined);
 const filters = ref({
   owner_address: undefined as string | undefined,
   supplier_address: undefined as string | undefined,
+  supplier_status: 'staked' as string, // Default to 'staked'
   chain: apiChainName.value,
   start_date: start.toISOString(),
   end_date: end.toISOString(),
@@ -48,7 +51,7 @@ watch(apiChainName, (newChain) => {
   filters.value.chain = newChain;
 });
 
-function openFilters(field?: 'owner' | 'supplier' | 'date') {
+function openFilters(field?: 'date') {
   focusField.value = field;
   showFilters.value = true;
 }
@@ -57,10 +60,11 @@ function onApply(newFilters: any) {
   focusField.value = undefined; // Reset focus after applying
 }
 
-// Computed filters for service dashboard (only supplier_address and owner_address)
+// Computed filters for service dashboard
 const serviceDashboardFilters = computed(() => ({
   supplier_address: filters.value.supplier_address,
   owner_address: filters.value.owner_address,
+  supplier_status: filters.value.supplier_status,
 }));
 
 // Transaction state
@@ -136,6 +140,7 @@ async function loadTransactions() {
       limit: txItemsPerPage.value,
       sort_by: txSortBy.value,
       sort_order: txSortOrder.value,
+      status: filters.value.supplier_status, // ✅ FIXED: Added supplier_status
     };
 
     // Add type filter based on selected tab
@@ -148,12 +153,21 @@ async function loadTransactions() {
       filtersObj.status = txStatusFilter.value === 'success' ? "true" : "false";
     }
 
-    if (txStartDate.value) {
-      filtersObj.start_date = new Date(txStartDate.value).toISOString();
+    // ✅ FIXED: Main filter dates (ya to advanced dates ya main filter dates)
+    const startDate = txStartDate.value 
+      ? new Date(txStartDate.value).toISOString() 
+      : filters.value.start_date;
+    
+    const endDate = txEndDate.value 
+      ? new Date(txEndDate.value).toISOString() 
+      : filters.value.end_date;
+
+    if (startDate) {
+      filtersObj.start_date = startDate;
     }
 
-    if (txEndDate.value) {
-      filtersObj.end_date = new Date(txEndDate.value).toISOString();
+    if (endDate) {
+      filtersObj.end_date = endDate;
     }
 
     if (txMinAmount.value !== undefined) {
@@ -210,21 +224,23 @@ watch(activeTab, (newTab) => {
   <div class="pt-[6.5rem]">
     <div class="flex items-center justify-between my-4">
       <p class="text-2xl rounded-xl px-4 py-2 font-bold">
-        Supplier Performance Dashboard
+        Operator Lookup Dashboard
       </p>
       <button class="btn btn-sm dark:bg-[rgba(255,255,255,.03);] dark:hover:bg-[rgba(255,255,255,0.06)]" @click="openFilters()">Filter</button>
     </div>
 
     <!-- Active Filters Display -->
-    <div v-if="filters.owner_address || filters.supplier_address || filters.start_date || filters.end_date" 
+    <div v-if="filters.owner_address || filters.supplier_address || 
+              (filters.supplier_status && filters.supplier_status !== 'staked') || 
+              filters.start_date || filters.end_date" 
       class="flex bg-[#ffffff] hover:bg-base-200 p-3 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
       <div class="flex items-center gap-2 flex-wrap">
         <span class="text-xs font-semibold text-base-content/70 mr-1">Active Filters:</span>
         
         <!-- Owner Address Filter -->
-        <div v-if="filters.owner_address" class="badge badge-primary badge-sm gap-1 cursor-pointer hover:badge-secondary" @click="openFilters('owner')">
+        <div v-if="filters.owner_address" class="badge badge-primary badge-sm gap-1 cursor-pointer hover:badge-info" @click="openFilters()">
           <Icon icon="mdi:account" class="text-xs" />
-          <span class="font-mono text-xs">{{ filters.owner_address.substring(0, 12) }}...</span>
+          <span class="text-xs font-mono max-w-[200px] truncate">{{ filters.owner_address }}</span>
           <button 
             class="ml-1 hover:bg-base-content/20 rounded-full p-0.5"
             @click.stop="filters.owner_address = undefined; onApply({ owner_address: undefined })"
@@ -233,26 +249,29 @@ watch(activeTab, (newTab) => {
           </button>
         </div>
 
-        <!-- Supplier Address(es) Filter -->
-        <div v-if="filters.supplier_address" class="badge badge-secondary badge-sm gap-1 cursor-pointer hover:badge-accent" @click="openFilters('supplier')">
+        <!-- Supplier Operator Address(es) Filter -->
+        <div v-if="filters.supplier_address" class="badge badge-secondary badge-sm gap-1 cursor-pointer hover:badge-info" @click="openFilters()">
           <Icon icon="mdi:server-network" class="text-xs" />
-          <span class="font-mono text-xs">
-            <template v-if="filters.supplier_address.includes(',')">
-              <template v-if="filters.supplier_address.split(',').length > 1">
-                {{ filters.supplier_address.split(',')[0].trim().substring(0, 8) }}...
-                <span class="ml-1 font-sans">+{{ filters.supplier_address.split(',').filter(addr => addr.trim()).length - 1 }} more</span>
-              </template>
-              <template v-else>
-                {{ filters.supplier_address.substring(0, 12) }}...
-              </template>
-            </template>
-            <template v-else>
-              {{ filters.supplier_address.substring(0, 12) }}...
-            </template>
+          <span class="text-xs">
+            {{ filters.supplier_address.split(',').length }} supplier{{ filters.supplier_address.split(',').length > 1 ? 's' : '' }}
           </span>
           <button 
             class="ml-1 hover:bg-base-content/20 rounded-full p-0.5"
             @click.stop="filters.supplier_address = undefined; onApply({ supplier_address: undefined })"
+          >
+            <Icon icon="mdi:close" class="text-xs" />
+          </button>
+        </div>
+
+        <!-- Supplier Status Filter -->
+        <div v-if="filters.supplier_status && filters.supplier_status !== 'staked'" 
+             class="badge badge-info badge-sm gap-1 cursor-pointer hover:badge-info" 
+             @click="openFilters()">
+          <Icon icon="mdi:shield-check" class="text-xs" />
+          <span class="text-xs capitalize">{{ filters.supplier_status.replace('_', ' ') }}</span>
+          <button 
+            class="ml-1 hover:bg-base-content/20 rounded-full p-0.5"
+            @click.stop="filters.supplier_status = 'staked'; onApply({ supplier_status: 'staked' })"
           >
             <Icon icon="mdi:close" class="text-xs" />
           </button>
@@ -266,7 +285,16 @@ watch(activeTab, (newTab) => {
           </span>
           <button 
             class="ml-1 hover:bg-base-content/20 rounded-full p-0.5"
-            @click.stop="filters.start_date = start.toISOString(); filters.end_date = end.toISOString(); onApply({ start_date: start.toISOString(), end_date: end.toISOString() })"
+            @click.stop="
+              const newEnd = new Date();
+              newEnd.setHours(23, 59, 59, 999);
+              const newStart = new Date(newEnd);
+              newStart.setDate(newStart.getDate() - 29);
+              newStart.setHours(0, 0, 0, 0);
+              filters.start_date = newStart.toISOString();
+              filters.end_date = newEnd.toISOString();
+              onApply({ start_date: newStart.toISOString(), end_date: newEnd.toISOString() });
+            "
           >
             <Icon icon="mdi:close" class="text-xs" />
           </button>
@@ -275,7 +303,25 @@ watch(activeTab, (newTab) => {
         <!-- Clear All Button -->
         <button 
           class="btn btn-xs btn-ghost ml-auto"
-          @click="filters.owner_address = undefined; filters.supplier_address = undefined; filters.start_date = start.toISOString(); filters.end_date = end.toISOString(); onApply({ owner_address: undefined, supplier_address: undefined, start_date: start.toISOString(), end_date: end.toISOString() })"
+          @click="
+            const newEnd = new Date();
+            newEnd.setHours(23, 59, 59, 999);
+            const newStart = new Date(newEnd);
+            newStart.setDate(newStart.getDate() - 29);
+            newStart.setHours(0, 0, 0, 0);
+            filters.owner_address = undefined;
+            filters.supplier_address = undefined;
+            filters.supplier_status = 'staked';
+            filters.start_date = newStart.toISOString();
+            filters.end_date = newEnd.toISOString();
+            onApply({
+              owner_address: undefined,
+              supplier_address: undefined,
+              supplier_status: 'staked',
+              start_date: newStart.toISOString(),
+              end_date: newEnd.toISOString()
+            });
+          "
         >
           <Icon icon="mdi:filter-off" class="text-xs" />
           Clear All
@@ -690,4 +736,3 @@ watch(activeTab, (newTab) => {
   th, td { padding: 0.5rem; }
 }
 </style>
-
