@@ -635,7 +635,8 @@ onMounted(() => {
       v-show="tab === 'blocks'"
       class="bg-base-200 px-0.5 pt-0.5 pb-4 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
     >
-      <div class="bg-base-200 rounded-md overflow-auto">
+      <div class="bg-base-200 rounded-md">
+        <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
         <table class="table table-compact w-full">
           <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
             <tr class="border-b-[0px] text-sm font-semibold">
@@ -709,6 +710,7 @@ onMounted(() => {
             </tr>
           </TransitionGroup>
         </table>
+        </div>
 
         <!-- Pagination Bar -->
         <div class="flex justify-between items-center gap-4 my-6 px-6">

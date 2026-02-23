@@ -238,6 +238,7 @@ onMounted(async () => {
   <div class="mb-[2vh] pt-[6.5rem]">
     <p class="bg-[#ffffff hover:bg-base-200 text-2xl w-full px-4 py-4 my-4 font-bold text-[#000000] dark:text-[#ffffff] rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">Services</p>
     <div class="bg-base-200 p-2 rounded-xl hover:bg-base-300 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
+      <div class="overflow-auto" style="max-height:calc(100vh - 18rem)">
       <table class="table w-full table-compact">
         <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
           <tr class="text-sm font-semibold rounded-xl">
@@ -346,6 +347,7 @@ onMounted(async () => {
           </tr>
         </tbody>
       </table>
+      </div>
 
       <!-- Pagination -->
       <div class="flex justify-between items-center gap-4 my-6 px-6">

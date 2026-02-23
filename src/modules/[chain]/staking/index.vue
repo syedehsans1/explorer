@@ -432,11 +432,11 @@ function goToLast() {
                 <span class="loading loading-spinner loading-lg"></span>
             </div>
 
-            <!-- scroll hataya -->
             <div
             v-else
             class="bg-base-200 hover:bg-base-300 dark:bg-[rgba(255,255,255,.03)] rounded-xl dark:border-base-200 px-4 pt-2 pb-2"
             >
+            <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
             <table class="table w-full rounded-xl">
                 <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
                 <tr class="text-sm font-semibold">
@@ -550,6 +550,7 @@ function goToLast() {
                 </tr>
                 </tbody>
             </table>
+            </div>
 
             <!-- Pagination Section -->
             <div class="flex justify-between items-center gap-4 my-6 px-6">

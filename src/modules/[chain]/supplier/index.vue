@@ -276,10 +276,10 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
       </div>
     </div>
 
-    <!-- Scroll hataya gaya -->
     <div
       class="bg-[#ffffff] hover:bg-base-200 p-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto"
     >
+      <div class="overflow-auto" style="max-height:calc(100vh - 18rem)">
       <table class="table w-full table-compact rounded-xl">
         <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
           <tr class="text-sm font-semibold">
@@ -388,6 +388,7 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
           </tr>
         </tbody>
       </table>
+      </div>
 
       <!-- Pagination Bar -->
       <div class="flex justify-between items-center gap-4 my-6 px-6">
