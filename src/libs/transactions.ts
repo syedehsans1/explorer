@@ -8,6 +8,7 @@ export interface TransactionFilters {
   address?: string;
   addresses?: string[];
   type?: string;
+  types?: string[];  // multiple types - will be fetched in parallel and merged
   status?: string;
   chain?: string;
   start_date?: string;
@@ -62,6 +63,7 @@ export async function fetchTransactions(
     address,
     addresses,
     type,
+    types,
     status,
     chain,
     start_date,
@@ -73,6 +75,40 @@ export async function fetchTransactions(
     sort_by = 'timestamp',
     sort_order = 'desc',
   } = filters;
+
+  // If single type in types array, treat as regular type filter
+  if (types && types.length === 1) {
+    return fetchTransactions({ ...filters, type: types[0], types: undefined });
+  }
+
+  // If multiple types requested, fetch in parallel and merge results
+  if (types && types.length > 1) {
+    const results = await Promise.all(
+      types.map(t => fetchTransactions({ ...filters, type: t, types: undefined }))
+    );
+    // Merge all results
+    const allTxs = results.flatMap(r => r.data || []);
+    const totalCount = results.reduce((sum, r) => sum + (r.meta?.total || 0), 0);
+    const totalPages = Math.ceil(totalCount / limit);
+    const failedLast24h = results.reduce((sum, r) => sum + (r.meta?.failedLast24h || 0), 0);
+
+    // Sort merged results
+    allTxs.sort((a, b) => {
+      if (sort_by === 'timestamp') {
+        const diff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        return sort_order === 'desc' ? diff : -diff;
+      }
+      if (sort_by === 'block_height') {
+        return sort_order === 'desc' ? b.block_height - a.block_height : a.block_height - b.block_height;
+      }
+      return 0;
+    });
+
+    return {
+      data: allTxs.slice(0, limit),
+      meta: { total: totalCount, page, limit, totalPages, failedLast24h }
+    };
+  }
 
   // Determine if we should use POST (many addresses or explicitly needed)
   const addressList = addresses || (address ? [address] : []);

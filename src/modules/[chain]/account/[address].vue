@@ -475,22 +475,27 @@ async function loadTransactions(address: string) {
     // Add type filter based on selected tab
     const selectedTypes = typeTabMap[selectedTypeTab.value];
     if (selectedTypes.length > 0) {
-      // if the account is an application, add the MsgStakeApplication type
       if (selectedTypeTab.value === 'staking') {
+        // Filter by stake+unstake types specific to the account entity type
         if (applications.value.address === address) {
-          filters.type = 'MsgStakeApplication (application)';
+          filters.types = ['MsgStakeApplication (application)', 'MsgUnstakeApplication (application)'];
         } else if (gateways.value.address === address) {
-          filters.type = 'MsgStakeGateway (gateway)';
+          filters.types = ['MsgStakeGateway (gateway)', 'MsgUnstakeGateway (gateway)'];
         } else if (suppliers.value.operator_address === address) {
-          filters.type = 'MsgStakeSupplier (supplier)';
+          filters.types = ['MsgStakeSupplier (supplier)', 'MsgUnstakeSupplier (supplier)'];
+        } else {
+          // Regular wallet: show all staking-related types
+          filters.types = selectedTypes;
         }
-      } else {
+      } else if (selectedTypes.length === 1) {
         filters.type = selectedTypes[0];
+      } else {
+        filters.types = selectedTypes;
       }
     }
 
     if (txStatusFilter.value) {
-      filters.status = txStatusFilter.value == 'success' ? "true" : "false";
+      filters.status = txStatusFilter.value == 'success' ? "true" : "pending";
     }
     if (txStartDate.value) {
       // Convert datetime-local to ISO 8601

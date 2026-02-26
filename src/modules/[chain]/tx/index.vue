@@ -150,7 +150,9 @@ async function prependNewTransactions() {
   if (isPrepending.value) return
   if (currentPage.value !== 1) return
   if (transactions.value.length === 0) return
-  if (isNodeFallback.value) return  // node fallback mein auto-prepend nahi
+  if (isNodeFallback.value) return
+  // Skip prepend when any filter is active — fetched txs won't match the filter
+  if (statusFilter.value || selectedTypeTab.value !== 'all' || startDate.value || endDate.value || minAmount.value !== undefined || maxAmount.value !== undefined) return
 
   isPrepending.value = true
 
@@ -326,8 +328,12 @@ async function loadTransactions() {
     }
 
     const selectedTypes = typeTabMap[selectedTypeTab.value]
-    if (selectedTypes.length > 0) filters.type = selectedTypes[0]
-    if (statusFilter.value) filters.status = statusFilter.value === 'success' ? "true" : "false"
+    if (selectedTypes.length === 1) {
+      filters.type = selectedTypes[0]
+    } else if (selectedTypes.length > 1) {
+      filters.types = selectedTypes
+    }
+    if (statusFilter.value) filters.status = statusFilter.value === 'success' ? "true" : "pending"
     if (startDate.value) filters.start_date = new Date(startDate.value).toISOString()
     if (endDate.value) filters.end_date = new Date(endDate.value).toISOString()
     if (minAmount.value !== undefined) filters.min_amount = minAmount.value
@@ -337,7 +343,8 @@ async function loadTransactions() {
     transactions.value = serverData.transactions
     totalTransactions.value = serverData.total
     totalPages.value = serverData.totalPages
-    failedLast24h.value = serverData.failedLast24h
+    // NOTE: do NOT overwrite failedLast24h here — API always returns 0 for it.
+    // It is maintained independently by getFailed24HTransactionsCount().
     isNodeFallback.value = false
 
   } catch (serverError) {
@@ -348,7 +355,6 @@ async function loadTransactions() {
       transactions.value = nodeData.transactions
       totalTransactions.value = nodeData.total
       totalPages.value = nodeData.totalPages
-      failedLast24h.value = nodeData.failedLast24h
       isNodeFallback.value = true
     } catch (nodeError: any) {
       console.error('Node fallback also failed:', nodeError)
@@ -415,6 +421,26 @@ const getLast24HTransactionsCount = async () => {
   }
 }
 
+// 🔹 Get failed (pending) transactions count in last 24H
+const getFailed24HTransactionsCount = async () => {
+  const now = new Date()
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+  try {
+    const data = await fetchTransactions({
+      chain: apiChainName,
+      page: 1,
+      limit: 1,
+      status: 'pending',
+      start_date: yesterday.toISOString(),
+      end_date: now.toISOString(),
+    })
+    return data.meta?.total || 0
+  } catch (error) {
+    return 0
+  }
+}
+
 // 🔹 Debounced load
 function debouncedLoad() {
   if (debounceTimer) clearTimeout(debounceTimer)
@@ -458,10 +484,16 @@ onMounted(async () => {
   tab.value = String(router.currentRoute.value.query.tab || 'recent')
   await loadTransactions()
 
-  tx24HCount.value = await getLast24HTransactionsCount()
+  ;[tx24HCount.value, failedLast24h.value] = await Promise.all([
+    getLast24HTransactionsCount(),
+    getFailed24HTransactionsCount(),
+  ])
 
   setInterval(async () => {
-    tx24HCount.value = await getLast24HTransactionsCount()
+    ;[tx24HCount.value, failedLast24h.value] = await Promise.all([
+      getLast24HTransactionsCount(),
+      getFailed24HTransactionsCount(),
+    ])
   }, 60000)
 })
 </script>
@@ -501,7 +533,7 @@ onMounted(async () => {
       </div>
       <div class="flex bg-[#ffffff] hover:bg-base-200 p-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <span>
-          <div class="text-xs text-[#64748B]">Total Transactions (24H)</div>
+          <div class="text-xs text-[#64748B]">Total Transactions</div>
           <div class="font-bold">{{ totalTransactions.toLocaleString() }}</div>
         </span>
       </div>
@@ -617,7 +649,7 @@ onMounted(async () => {
       <div class="bg-base-200 px-0.5 pt-0.5 pb-4 mb-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-auto" style="max-height:calc(100vh - 22rem)">
         <table class="table w-full table-compact">
           <thead class="bg-base-200 dark:bg-[rgba(255,255,255,.03)] sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="border-b-[0px] text-sm font-semibold bg-base-200">
               <th>{{ $t('tx.tx_hash') }}</th>
               <th>{{ $t('block.block') }}</th>
               <th>{{ $t('staking.status') }}</th>

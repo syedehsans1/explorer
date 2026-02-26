@@ -209,6 +209,25 @@ watch(() => base.latest?.block?.header?.height, (newHeight, oldHeight) => {
 const latestBlockPollInterval = ref<ReturnType<typeof setInterval> | null>(null)
 const LATEST_BLOCK_POLL_MS = 10_000
 
+// ✅ FIX 1: lastKnownHeight ref declare karo
+const lastKnownHeight = ref<number>(0)
+
+// ✅ FIX 2: prependNewBlock function define karo
+async function prependNewBlock(height: number) {
+  try {
+    const block = await blockchain.rpc.getBaseBlockAt(String(height))
+    if (!block) return
+    const previousTop = blocks.value[0] || null
+    const row = rawBlockToApiBlockItem(block, previousTop)
+    if (!row) return
+    blocks.value = [row, ...blocks.value]
+    if (blocks.value.length > itemsPerPage.value) blocks.value.pop()
+    lastKnownHeight.value = Math.max(lastKnownHeight.value, height)
+  } catch (err) {
+    console.warn(`[prependNewBlock] Could not fetch block ${height}:`, err)
+  }
+}
+
 function startLatestBlockPoll() {
   if (latestBlockPollInterval.value) return
   latestBlockPollInterval.value = setInterval(async () => {

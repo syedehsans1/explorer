@@ -156,7 +156,9 @@ async function loadApplications() {
     
     // Add status filter if not 'all'
     if (statusFilter.value !== 'all') {
-      params.append('status', statusFilter.value)
+      // Map UI filter values to API status values
+      const apiStatus = statusFilter.value === 'unstaked' ? 'unstake_requested' : statusFilter.value
+      params.append('status', apiStatus)
     }
     
     const apiUrl = `/api/v1/applications?${params.toString()}`
@@ -321,7 +323,7 @@ const networkStats = ref({
   applications: 0,
   totalStakedAmount: 0,
   unstakingCount: 0,
-  totalUnstakingTokens: 0,
+  totalUnstakingTokens24h: 0,
 })
 
 // Cache control
@@ -364,14 +366,28 @@ async function loadNetworkStats() {
       const apiUrl = `/api/v1/applications?chain=${apiChainName.value}&page=1&limit=1`
       const apiRes = await fetch(apiUrl)
       const apiData = await apiRes.json()
-      
+
       if (apiRes.ok && apiData.meta) {
         networkStats.value.totalStakedAmount = apiData.meta.totalStakedAmount || 0
         networkStats.value.unstakingCount = apiData.meta.unstakingCount || 0
-        networkStats.value.totalUnstakingTokens = apiData.meta.totalUnstakingTokens || 0
       }
     } catch (apiError) {
       console.error('Error loading API stats:', apiError)
+    }
+
+    // Calculate 24h unstaking tokens: fetch unstake_requested apps, filter by last_seen within 24h
+    try {
+      const unstakingUrl = `/api/v1/applications?chain=${apiChainName.value}&page=1&limit=500&status=unstake_requested`
+      const unstakingRes = await fetch(unstakingUrl)
+      const unstakingData = await unstakingRes.json()
+      if (unstakingRes.ok && unstakingData.data) {
+        const yesterday = Date.now() - 24 * 60 * 60 * 1000
+        networkStats.value.totalUnstakingTokens24h = unstakingData.data
+          .filter((app: any) => app.last_seen && new Date(app.last_seen).getTime() > yesterday)
+          .reduce((sum: number, app: any) => sum + Number(app.staked_amount || 0), 0)
+      }
+    } catch (e) {
+      console.error('Error computing application 24h unstaking tokens:', e)
     }
     
     networkStatsCacheTime.value = now
@@ -406,8 +422,8 @@ async function loadNetworkStats() {
       </div>
       <div class="flex bg-[#ffffff] hover:bg-base-200 p-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <span>
-          <div class="text-xs text-[#64748B]">Unstaking Tokens</div>
-          <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens.toString() }) }}</div>
+          <div class="text-xs text-[#64748B]">Unstaking Tokens (24h)</div>
+          <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens24h.toString() }) }}</div>
         </span>
       </div>
     </div>
