@@ -652,27 +652,73 @@ async function loadBlocks() {
         blocksTotalPages.value = 0;
       }
     }
-  }
-
-  // ✅ Load hone ke baad lastKnownHeight set karo
-  if (blocks.value.length > 0) {
-    lastKnownHeightDashboard.value = Math.max(...blocks.value.map(b => Number(b.height)))
-  }
-
-  loadingBlocks.value = false;
-
-  // ✅ Race condition fix: agar loadBlocks ke doran currentBlockHeight badh gaya
-  // toh woh blocks miss ho jaate hain - unhe ab prepend karo
-  const currentH = Number(currentBlockHeight.value)
-  if (currentH > lastKnownHeightDashboard.value && blocks.value.length > 0) {
-    const missedCount = Math.min(currentH - lastKnownHeightDashboard.value, 5)
-    for (let h = lastKnownHeightDashboard.value + 1; h <= lastKnownHeightDashboard.value + missedCount; h++) {
-      await prependNewBlockDashboard(h)
-    }
+  } finally {
+    loadingBlocks.value = false;
   }
 }
 
-// Add these refs for block list virtualization
+// Map raw latest block (from base store / RPC) into ApiBlockItem shape for the dashboard table.
+// Optionally takes the previous row so we can derive production time as
+// time(current) - time(previous) in seconds.
+function latestBlockToApiBlockItem(prev?: ApiBlockItem | null): ApiBlockItem | null {
+  const latestBlock = base.latest?.block;
+  if (!latestBlock?.header) return null;
+
+  const height = parseInt(latestBlock.header.height || '0');
+
+  let blockProductionTime: number | undefined;
+  const currentTs = latestBlock.header.time;
+  const prevTs = prev?.timestamp;
+  if (currentTs && prevTs) {
+    const currentMs = new Date(currentTs).getTime();
+    const prevMs = new Date(prevTs).getTime();
+    if (Number.isFinite(currentMs) && Number.isFinite(prevMs) && currentMs > prevMs) {
+      blockProductionTime = (currentMs - prevMs) / 1000;
+    }
+  }
+
+  return {
+    id: `${latestBlock.header.chain_id}:${latestBlock.header.height}`,
+    height,
+    hash: base.latest?.block_id?.hash || '',
+    timestamp: latestBlock.header.time || new Date().toISOString(),
+    proposer: latestBlock.header.proposer_address || '',
+    chain: latestBlock.header.chain_id || apiChainName.value,
+    transaction_count: latestBlock.data?.txs?.length || 0,
+    block_production_time: blockProductionTime,
+  };
+}
+
+// When latest block advances and we're on the first page, prepend the new block into the dashboard table in-place
+function tryPrependLatestBlockToDashboard() {
+  if (loadingBlocks.value) return;
+  if (blocksPage.value !== 1) return;
+  if (!blocks.value.length) return;
+
+  const latest = base.latest?.block;
+  if (!latest?.header?.height) return;
+
+  const latestHeight = Number(latest.header.height);
+  const topHeight = Number(blocks.value[0]?.height || 0);
+
+  if (!Number.isFinite(latestHeight) || latestHeight <= topHeight) return;
+
+  const previousTop = blocks.value[0] || null;
+  const row = latestBlockToApiBlockItem(previousTop);
+  if (!row) return;
+
+  // Prepend newest block and trim to current limit
+  blocks.value = [row, ...blocks.value];
+  if (blocks.value.length > blocksLimit.value) {
+    blocks.value.pop();
+  }
+
+  // Keep total count in sync (at least not smaller than latest height)
+  blocksTotal.value = Math.max(blocksTotal.value, latestHeight);
+}
+
+
+// Add these refs for block list virtualization after the existing refs
 const visibleBlocks = ref<{ item: any; index: number }[]>([]);
 const visibleTxs = ref<{ item: any; index: number }[]>([]);
 const blockTableContainer = ref<HTMLDivElement | null>(null);
@@ -946,8 +992,8 @@ async function loadServicesSummary24h() {
     if (!text) throw new Error('Empty response from API');
     const result = JSON.parse(text);
     if (response.ok && result?.data) {
-      totalRelays24h.value = Number(result.data.relays || 0);
-      totalComputeUnits24h.value = Number(result.data.claimed_compute_units || 0);
+      totalRelays24h.value = Number(result.data.estimated_relays || 0);
+      totalComputeUnits24h.value = Number(result.data.estimated_compute_units || 0);
     } else {
       totalRelays24h.value = 0;
       totalComputeUnits24h.value = 0;
@@ -1197,7 +1243,7 @@ async function loadNetworkGrowthPerformance(windowDays: number = 7) {
       if (!dayStr) continue;
       const d = new Date(dayStr + 'T00:00:00Z');
       labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-      relaysDaily.push(Number(dayItem.relays || 0));
+      relaysDaily.push(Number(dayItem.estimated_relays || 0));
       claimedCUDaily.push(Number(dayItem.claimed_compute_units || 0));
       estimatedCUDaily.push(Number(dayItem.estimated_compute_units || 0));
     }
@@ -1487,6 +1533,8 @@ watch(() => base.allTxs.length, () => {
 watch(() => base.latest?.block?.header?.height, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) {
     debouncedUpdateNetworkStats();
+    // Also keep the dashboard \"Latest Blocks\" table fresh by inserting the newest block at the top
+    tryPrependLatestBlockToDashboard();
   }
 });
 
@@ -1890,7 +1938,7 @@ function formatBlockTime(secondsStr?: string | number) {
             <span class="text-xs text-secondary">Relays (24h)</span>
           </div>
           <div class="text-xl text-main flex items-center justify-center font-medium">
-            {{ formatWithCommas(totalRelays24h) }}
+            {{ formatCompact(totalRelays24h) }}
           </div>
         </div>
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">

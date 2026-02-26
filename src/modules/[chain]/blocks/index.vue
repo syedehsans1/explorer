@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useStakingStore, useBaseStore, useFormatter } from '@/stores'
 import { PageRequest } from '@/types'
 import { useBlockchain } from '@/stores'
@@ -132,137 +132,102 @@ const pageSizeOptions = [10, 25, 50, 100]
 const avgBlockProductionTime = ref<number | null>(null)
 const avgBlockSize = ref<number | null>(null)
 
-// ✅ Track last known block height to detect new blocks
-const lastKnownHeight = ref<number>(0)
-// ✅ Lock: ek waqt mein ek hi prepend chale
-const isPrepending = ref(false)
-
-// ✅ Node se sirf ek naya block fetch karo (primary - fast)
-async function fetchSingleBlockFromNode(height: number): Promise<ApiBlockItem | null> {
-  try {
-    // Current aur previous block dono fetch karo production time ke liye
-    const [block, prevBlock] = await Promise.all([
-      blockchain.rpc.getBaseBlockAt(String(height)).catch(() => null),
-      height > 1 ? blockchain.rpc.getBaseBlockAt(String(height - 1)).catch(() => null) : Promise.resolve(null)
-    ])
-
-    if (!block) return null
-    const blockHeight = parseInt(block.block?.header?.height || '0')
-    if (blockHeight !== height) return null
-
-    // ✅ Production time calculate karo timestamps se
-    const currentTime = new Date(block.block?.header?.time || '').getTime()
-    const prevTime = prevBlock
-      ? new Date(prevBlock.block?.header?.time || '').getTime()
-      : 0
-    const productionTimeSec = (prevTime && currentTime && currentTime > prevTime)
-      ? parseFloat(((currentTime - prevTime) / 1000).toFixed(3))
-      : 0
-
-    return {
-      id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
-      height: blockHeight,
-      hash: block.block_id?.hash || '',
-      timestamp: block.block?.header?.time || new Date().toISOString(),
-      proposer: block.block?.header?.proposer_address || '',
-      chain: block.block?.header?.chain_id || apiChainName.value,
-      transaction_count: block.block?.data?.txs?.length || 0,
-      block_production_time: productionTimeSec,
-      raw_block_size: 0,
-    }
-  } catch {
-    return null
-  }
+function updateCurrentBlockProductionTime() {
+  if (!Array.isArray(blocks.value)) return
+  const height = currentBlockHeight.value
+  // Ensure both values are of the same type for comparison
+  const block = blocks.value.find(b => String(b.height) === String(height))
 }
 
-// ✅ Server se specific height ka block fetch karo
-async function fetchSingleBlockFromServer(height: number): Promise<ApiBlockItem | null> {
-  try {
-    // Height-specific endpoint pehle try karo
-    const url = `/api/v1/blocks/${height}?chain=${apiChainName.value}`
-    const res = await fetch(url)
-    if (!res.ok) {
-      // Fallback: list se dhundho
-      const listUrl = `/api/v1/blocks?chain=${apiChainName.value}&page=1&limit=5`
-      const listRes = await fetch(listUrl)
-      if (!listRes.ok) return null
-      const listText = await listRes.text()
-      if (!listText) return null
-      const listData = JSON.parse(listText)
-      const blockList: ApiBlockItem[] = listData.blocks || listData.data || []
-      return blockList.find((b: ApiBlockItem) => Number(b.height) === height) || null
-    }
-    const text = await res.text()
-    if (!text) return null
-    const data = JSON.parse(text)
-    const block = data.block || data.data || data
-    if (Number(block?.height) !== height) return null
-    return block
-  } catch {
-    return null
-  }
-}
-
-// ✅ Sirf naya block table ke upar prepend karo - poora reload nahi
-async function prependNewBlock(height: number) {
-  // Lock check
-  if (isPrepending.value) return
-  isPrepending.value = true
-
-  try {
-    // Check: kya yeh block already list mein hai?
-    if (blocks.value.some(b => Number(b.height) === height)) return
-
-    // Pehle node se try karo - fast aur accurate
-    let newBlock = await fetchSingleBlockFromNode(height)
-
-    // Agar node se nahi mila toh server se try karo
-    if (!newBlock) {
-      newBlock = await fetchSingleBlockFromServer(height)
-    }
-
-    if (!newBlock) return
-
-    // Height verify karo
-    if (Number(newBlock.height) !== height) return
-
-    // Final duplicate check
-    if (blocks.value.some(b => Number(b.height) === height)) return
-
-    // Table ke upar naya block add karo
-    blocks.value = [newBlock, ...blocks.value]
-
-    // Agar page 1 par hain toh last item remove karo (taake itemsPerPage limit rahay)
-    if (currentPage.value === 1 && blocks.value.length > itemsPerPage.value) {
-      blocks.value = blocks.value.slice(0, itemsPerPage.value)
-    }
-
-    // Total count update karo
-    totalBlocks.value = totalBlocks.value + 1
-    totalPages.value = Math.ceil(totalBlocks.value / itemsPerPage.value)
-  } finally {
-    isPrepending.value = false
-  }
-}
-
-// ✅ Watch currentBlockHeight - jab naya block aaye sirf woh prepend karo
-watch(currentBlockHeight, async (newHeight, oldHeight) => {
-  const newH = Number(newHeight)
-  const oldH = Number(oldHeight)
-
-  // Sirf page 1 par auto-prepend karo
-  if (currentPage.value !== 1) return
-  // Sirf tab karo jab height genuinely badhi ho
-  if (newH <= oldH) return
-  // Sirf tab jab blocks already loaded hain
-  if (blocks.value.length === 0) return
-  // lastKnownHeight check
-  if (newH <= lastKnownHeight.value) return
-
-  // Immediately update karo taake duplicate trigger block ho
-  lastKnownHeight.value = newH
-  await prependNewBlock(newH)
+// ⭐ Watch block list changed
+watch(blocks, () => {
+  updateCurrentBlockProductionTime()
 })
+
+// ⭐ Watch current block height changed
+watch(currentBlockHeight, () => {
+  updateCurrentBlockProductionTime()
+})
+
+// Map raw block (base.latest / RPC shape) to ApiBlockItem for table
+// Optionally takes the previous block row so we can derive production time as
+// time(current) - time(previous) in seconds.
+function rawBlockToApiBlockItem(block: any, prev?: ApiBlockItem | null): ApiBlockItem {
+  if (!block?.block?.header) return null as unknown as ApiBlockItem
+  const height = parseInt(block.block.header.height || '0')
+  let blockProductionTime = 0
+
+  const currentTs = block.block?.header?.time
+  const prevTs = prev?.timestamp
+  if (currentTs && prevTs) {
+    const currentMs = new Date(currentTs).getTime()
+    const prevMs = new Date(prevTs).getTime()
+    if (Number.isFinite(currentMs) && Number.isFinite(prevMs) && currentMs > prevMs) {
+      blockProductionTime = (currentMs - prevMs) / 1000
+    }
+  }
+
+  return {
+    id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
+    height,
+    hash: block.block_id?.hash || '',
+    timestamp: block.block?.header?.time || new Date().toISOString(),
+    proposer: block.block?.header?.proposer_address || '',
+    chain: block.block?.header?.chain_id || apiChainName.value,
+    transaction_count: block.block?.data?.txs?.length || 0,
+    block_production_time: blockProductionTime,
+    raw_block_size: 0
+  }
+}
+
+// Prepend latest block to table when on page 1 (called by watcher and poll)
+function tryPrependLatestBlock() {
+  if (loading.value || currentPage.value !== 1 || blocks.value.length === 0) return
+  const latest = base.latest?.block
+  if (!latest?.header?.height) return
+  const latestHeight = Number(latest.header.height)
+  const topHeight = Number(blocks.value[0]?.height)
+  if (Number.isNaN(topHeight) || latestHeight <= topHeight) return
+  const previousTop = blocks.value[0] || null
+  const row = rawBlockToApiBlockItem(base.latest, previousTop)
+  if (!row) return
+  blocks.value = [row, ...blocks.value]
+  if (blocks.value.length > itemsPerPage.value) blocks.value.pop()
+  totalBlocks.value = Math.max(totalBlocks.value, latestHeight)
+}
+
+// When latest block advances and we're on page 1, prepend new block in place
+watch(() => base.latest?.block?.header?.height, (newHeight, oldHeight) => {
+  if (!newHeight) return
+  const newH = Number(newHeight)
+  const oldH = oldHeight ? Number(oldHeight) : 0
+  if (oldH > 0 && newH <= oldH) return
+  tryPrependLatestBlock()
+})
+
+// Poll for latest block while on blocks page (page 1) so table updates reliably
+const latestBlockPollInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const LATEST_BLOCK_POLL_MS = 10_000
+
+function startLatestBlockPoll() {
+  if (latestBlockPollInterval.value) return
+  latestBlockPollInterval.value = setInterval(async () => {
+    if (currentPage.value !== 1) return
+    try {
+      await base.fetchLatest()
+      tryPrependLatestBlock()
+    } catch {
+      // ignore
+    }
+  }, LATEST_BLOCK_POLL_MS)
+}
+
+function stopLatestBlockPoll() {
+  if (latestBlockPollInterval.value) {
+    clearInterval(latestBlockPollInterval.value)
+    latestBlockPollInterval.value = null
+  }
+}
 
 // 🔹 Server se blocks fetch karo
 async function getBlocksFromServer() {
@@ -408,72 +373,14 @@ async function loadBlocks() {
   try {
     const serverData = await getBlocksFromServer()
 
-    // ✅ Server response ke multiple possible formats handle karo
-    // Format 1: { data: [...], meta: { total, totalPages, avgBlockProductionTime, avgBlockSize } }
-    // Format 2: { blocks: [...], total, totalPages }
-    // Format 3: [...] (direct array)
-    if (Array.isArray(serverData)) {
-      blocks.value = serverData
-      totalBlocks.value = serverData.length
-      totalPages.value = 1
-    } else if (serverData.data && Array.isArray(serverData.data)) {
-      // ✅ Field names normalize karo - server ke alag formats handle karo
-      // DEBUG: pehle block ka structure console mein dekho
-      if (serverData.data.length > 0) {
-        console.log('[BlocksView Debug] First block from server:', JSON.stringify(serverData.data[0], null, 2))
-      }
-      
-      blocks.value = serverData.data.map((b: any) => ({
-        ...b,
-        // ✅ Production time - string ya number dono rakh lo (formatBlockTime parseFloat karega)
-        block_production_time: (
-          b.block_production_time ??
-          b.production_time ??
-          b.block_time ??
-          b.blockTime ??
-          b.avg_block_time ??
-          b.time_diff ??
-          b.timeDiff ??
-          b.duration ??
-          0
-        ),
-        // ✅ Block size - tamam possible field names
-        raw_block_size: Number(
-          b.raw_block_size ??
-          b.block_size ??
-          b.blockSize ??
-          b.size ??
-          0
-        ),
-        // ✅ Transaction count - tamam possible field names
-        transaction_count: Number(
-          b.transaction_count ??
-          b.tx_count ??
-          b.txCount ??
-          b.num_txs ??
-          b.txs ??
-          0
-        ),
-      }))
-      totalBlocks.value = serverData.meta?.total || serverData.total || 0
-      totalPages.value = serverData.meta?.totalPages || serverData.totalPages || 0
-      avgBlockProductionTime.value = serverData.meta?.avgBlockProductionTime != null
-        ? Number(serverData.meta.avgBlockProductionTime)
-        : null
-      avgBlockSize.value = serverData.meta?.avgBlockSize != null
-        ? Number(serverData.meta.avgBlockSize)
-        : null
-    } else if (serverData.blocks && Array.isArray(serverData.blocks)) {
-      blocks.value = serverData.blocks
-      totalBlocks.value = serverData.total || 0
-      totalPages.value = serverData.totalPages || 0
-      avgBlockProductionTime.value = serverData.avgBlockProductionTime || null
-      avgBlockSize.value = serverData.avgBlockSize || null
-    } else {
-      blocks.value = []
-      totalBlocks.value = 0
-      totalPages.value = 0
-    }
+    // Indexer returns { data: [...], meta: { total, page, limit, totalPages, avgBlockProductionTime, avgBlockSize } }
+    const rawBlocks = serverData?.data ?? serverData?.blocks ?? serverData
+    blocks.value = Array.isArray(rawBlocks) ? rawBlocks : []
+    const meta = serverData?.meta ?? serverData
+    totalBlocks.value = meta?.total ?? serverData?.total ?? blocks.value.length
+    totalPages.value = meta?.totalPages ?? serverData?.totalPages ?? (Math.ceil(totalBlocks.value / itemsPerPage.value) || 0)
+    avgBlockProductionTime.value = meta?.avgBlockProductionTime ?? serverData?.avgBlockProductionTime ?? null
+    avgBlockSize.value = meta?.avgBlockSize ?? serverData?.avgBlockSize ?? null
 
     isNodeFallback.value = false
 
@@ -579,6 +486,11 @@ function prevPage() { if (currentPage.value > 1) currentPage.value-- }
 onMounted(() => {
   loadNetworkStats()
   loadBlocks()
+  startLatestBlockPoll()
+})
+
+onUnmounted(() => {
+  stopLatestBlockPoll()
 })
 </script>
 

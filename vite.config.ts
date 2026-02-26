@@ -140,5 +140,6 @@ export default defineConfig({
       // Deny access to .git directory
       deny: ['.git'],
     },
+    allowedHosts: ['explorer.pocket.network'],
   },
 });
