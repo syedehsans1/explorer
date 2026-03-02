@@ -442,16 +442,6 @@ async function prependNewTxsDashboard() {
     // lastKnown update karo
     lastKnownTxHashDashboard.value = dashboardTxs.value[0]?.hash || ''
 
-    // ✅ visibleTxs bhi force update karo
-    await new Promise(resolve => setTimeout(resolve, 30))
-    if (txTableContainer.value && dashboardTxs.value.length > 0) {
-      const container = txTableContainer.value
-      const viewportRows = Math.ceil(container.clientHeight / itemHeight) + 5
-      visibleTxs.value = dashboardTxs.value.slice(0, viewportRows).map((item: any, index: number) => ({
-        item,
-        index
-      }))
-    }
   } finally {
     isPrependingTxsDashboard.value = false
   }
@@ -718,16 +708,13 @@ function tryPrependLatestBlockToDashboard() {
 }
 
 
-// Add these refs for block list virtualization after the existing refs
+// Refs for block list virtualization
 const visibleBlocks = ref<{ item: any; index: number }[]>([]);
-const visibleTxs = ref<{ item: any; index: number }[]>([]);
 const blockTableContainer = ref<HTMLDivElement | null>(null);
-const txTableContainer = ref<HTMLDivElement | null>(null);
 const itemHeight = 42;
 const bufferSize = 5;
 const ticking = ref(false);
 const blockScrollTimeout = ref<NodeJS.Timeout | null>(null);
-const txScrollTimeout = ref<NodeJS.Timeout | null>(null);
 const updateNetworkStatsTimeout = ref<NodeJS.Timeout | null>(null);
 const indexerHealthInterval = ref<NodeJS.Timeout | null>(null);
 
@@ -742,30 +729,11 @@ function debouncedUpdateNetworkStats() {
   }, 500);
 }
 
-function initVirtualLists() {
-  nextTick(() => {
-    if (txTableContainer.value) {
-      updateVisibleTxs();
-      txTableContainer.value.addEventListener('scroll', handleTxScroll, { passive: true });
-    }
-  });
-}
-
 function handleBlockScroll() {
   if (!ticking.value) {
     ticking.value = true;
     requestAnimationFrame(() => {
       updateVisibleBlocks();
-      ticking.value = false;
-    });
-  }
-}
-
-function handleTxScroll() {
-  if (!ticking.value) {
-    ticking.value = true;
-    requestAnimationFrame(() => {
-      updateVisibleTxs();
       ticking.value = false;
     });
   }
@@ -790,26 +758,6 @@ function updateVisibleBlocks() {
   }
 }
 
-function updateVisibleTxs() {
-  // ✅ dashboardTxs use karo agar initialized ho, warna base.allTxs fallback
-  const txSource = dashboardTxs.value.length > 0 ? dashboardTxs.value : (base.allTxs || [])
-  if (!txTableContainer.value || !txSource.length) return;
-  const container = txTableContainer.value;
-  const scrollTop = container.scrollTop;
-  const viewportHeight = container.clientHeight;
-  const startIndex = Math.floor(scrollTop / itemHeight) - bufferSize;
-  const endIndex = Math.ceil((scrollTop + viewportHeight) / itemHeight) + bufferSize;
-  const start = Math.max(0, startIndex);
-  const end = Math.min(txSource.length, endIndex);
-  if (visibleTxs.value.length === 0 ||
-    Math.abs(visibleTxs.value[0]?.index - start) >= 2 ||
-    Math.abs(visibleTxs.value[visibleTxs.value.length - 1]?.index - (end - 1)) >= 2) {
-    visibleTxs.value = txSource.slice(start, end).map((item, index) => ({
-      item,
-      index: start + index
-    }));
-  }
-}
 
 onMounted(async () => {
   store.loadDashboard();
@@ -857,8 +805,6 @@ onMounted(async () => {
   loadServicesSummary24h();
 
   isNetworkStatusLoading.value = false;
-
-  initVirtualLists();
 
   // ✅ Blocks load karo - lastKnownHeight automatically set ho jaayega inside loadBlocks()
   loadBlocks();
@@ -1536,11 +1482,7 @@ onBeforeUnmount(() => {
   if (blockTableContainer.value) {
     blockTableContainer.value.removeEventListener('scroll', handleBlockScroll);
   }
-  if (txTableContainer.value) {
-    txTableContainer.value.removeEventListener('scroll', handleTxScroll);
-  }
   if (blockScrollTimeout.value) clearTimeout(blockScrollTimeout.value);
-  if (txScrollTimeout.value) clearTimeout(txScrollTimeout.value);
   if (updateNetworkStatsTimeout.value) clearTimeout(updateNetworkStatsTimeout.value);
   if (indexerHealthInterval.value) clearInterval(indexerHealthInterval.value);
 });
@@ -1549,9 +1491,6 @@ watch(() => base.recents.length, () => {
   updateVisibleBlocks();
 });
 
-watch(() => base.allTxs.length, () => {
-  updateVisibleTxs();
-});
 
 watch(() => base.latest?.block?.header?.height, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) {
@@ -2197,7 +2136,7 @@ function formatBlockTime(secondsStr?: string | number) {
           </div>
         </div>
 
-        <div class="bg-base-200 rounded-md overflow-auto" style="height: 30rem;" ref="txTableContainer">
+        <div class="bg-base-200 rounded-md overflow-auto" style="max-height: 30rem;">
           <table class="table table-compact w-full bg-base-200">
             <thead class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200 sticky top-0 border-0">
               <tr class="border-none bg-base-200">
@@ -2216,29 +2155,29 @@ function formatBlockTime(secondsStr?: string | number) {
             </tr>
           </tbody>
 
-          <!-- ✅ TransitionGroup tag="tbody" - smooth animation -->
+          <!-- Direct render - no virtual scroll -->
           <TransitionGroup
             v-else
             name="tx-slide"
             tag="tbody"
           >
-            <tr v-for="item in visibleTxs" :key="item.item.hash || item.index"
+            <tr v-for="tx in dashboardTxs" :key="tx.hash"
               class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
               <td class="truncate text-[#153cd8]" style="max-width:10rem">
-                <RouterLink class="truncate hover:underline" :to="`/${props.chain}/tx/${item.item.hash}`">{{ item.item.hash }}</RouterLink>
+                <RouterLink class="truncate hover:underline" :to="`/${props.chain}/tx/${tx.hash}`">{{ tx.hash }}</RouterLink>
               </td>
               <td class="text-sm text-[#153cd8]">
-                <RouterLink :to="`/${props.chain}/blocks/${item.item.block_height}`" class="hover:underline">{{ item.item.block_height }}</RouterLink>
+                <RouterLink :to="`/${props.chain}/blocks/${tx.block_height}`" class="hover:underline">{{ tx.block_height }}</RouterLink>
               </td>
               <td>
                 <span class="text-xs truncate py-1 px-3 rounded-full"
-                  :class="(isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'bg-[#60BC29]/10 text-[#60BC29]' : 'bg-[#E03834]/10 text-[#E03834]'">
-                  {{ (isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'Success' : 'Failed' }}
+                  :class="(isTxsNodeFallback && tx.status == 0) || tx.status || tx.tx_response?.code === 0 ? 'bg-[#60BC29]/10 text-[#60BC29]' : 'bg-[#E03834]/10 text-[#E03834]'">
+                  {{ (isTxsNodeFallback && tx.status == 0) || tx.status || tx.tx_response?.code === 0 ? 'Success' : 'Failed' }}
                 </span>
               </td>
-              <td>{{ item.item.type }}</td>
-              <td>{{ format.formatTokens([{ amount: item.item.fee, denom: 'upokt' }]) }}</td>
-              <td class="text-sm">{{ format.toDay(item.item.timestamp, 'from') }}</td>
+              <td>{{ tx.type }}</td>
+              <td>{{ format.formatTokens([{ amount: tx.fee, denom: 'upokt' }]) }}</td>
+              <td class="text-sm">{{ format.toDay(tx.timestamp, 'from') }}</td>
             </tr>
           </TransitionGroup>
           </table>

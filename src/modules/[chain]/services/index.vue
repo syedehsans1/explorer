@@ -241,7 +241,7 @@ onMounted(async () => {
       <div class="overflow-auto" style="max-height:calc(100vh - 18rem)">
       <table class="table w-full table-compact">
         <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-          <tr class="text-sm font-semibold rounded-xl">
+          <tr class="text-sm font-semibold rounded-xl bg-base-200">
             <th>ID</th>
             <th>Name</th>
             <th>Owner</th>
