@@ -304,7 +304,7 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
       <div class="overflow-auto" style="max-height:calc(100vh - 18rem)">
       <table class="table w-full table-compact rounded-xl">
         <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-          <tr class="text-sm font-semibold">
+          <tr class="text-sm font-semibold bg-base-200">
             <td>Rank</td>
             <td>Address</td>
             <td>Status</td>
