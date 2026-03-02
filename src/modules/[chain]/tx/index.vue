@@ -533,7 +533,7 @@ onMounted(async () => {
       </div>
       <div class="flex bg-[#ffffff] hover:bg-base-200 p-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <span>
-          <div class="text-xs text-[#64748B]">Total Transactions</div>
+          <div class="text-xs text-[#64748B]">Total Transactions (24H)</div>
           <div class="font-bold">{{ totalTransactions.toLocaleString() }}</div>
         </span>
       </div>

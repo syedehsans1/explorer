@@ -449,6 +449,53 @@ async function loadBlocks() {
   }
 }
 
+// 🔹 Main load function with fallback logic
+async function loadBlocks() {
+  loading.value = true
+  fallbackError.value = ''
+
+  try {
+    const serverData = await getBlocksFromServer()
+
+    blocks.value = serverData.blocks || serverData
+    totalBlocks.value = serverData.total || 0
+    totalPages.value = serverData.totalPages || 0
+    avgBlockProductionTime.value = serverData.avgBlockProductionTime || null
+    avgBlockSize.value = serverData.avgBlockSize || null
+
+    isNodeFallback.value = false
+
+  } catch (serverError) {
+    console.warn('Server failed, trying node fallback...', serverError)
+
+    try {
+      isNodeFallback.value = true
+
+      const nodeData = await getBlocksFromNode()
+
+      blocks.value = nodeData.blocks
+      totalBlocks.value = nodeData.total
+      totalPages.value = nodeData.totalPages
+      avgBlockProductionTime.value = nodeData.avgBlockProductionTime
+      avgBlockSize.value = nodeData.avgBlockSize
+    } catch (nodeError: any) {
+      console.error('Node fallback also failed:', nodeError)
+      fallbackError.value = nodeError.message || 'Both server and node are unavailable'
+      isNodeFallback.value = true
+      // Keep previous data or show empty
+      if (blocks.value.length === 0) {
+        blocks.value = []
+        totalBlocks.value = 0
+        totalPages.value = 0
+      }
+    }
+  }
+
+  loading.value = false
+}
+
+
+
 // Watchers
 watch(itemsPerPage, () => { currentPage.value = 1; loadBlocks() })
 watch(currentPage, () => loadBlocks())

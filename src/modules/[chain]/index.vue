@@ -982,6 +982,28 @@ const networkStats = ref({
 const totalRelays24h = ref(0);
 const totalComputeUnits24h = ref(0);
 
+// async function loadServicesSummary24h() {
+//   try {
+//     const params = new URLSearchParams();
+//     params.append('window', '1');
+//     params.append('chain', apiChainName.value);
+//     const response = await fetch(`/api/v1/network-growth/summary?${params.toString()}`);
+//     const result = await response.json();
+//     if (response.ok && result?.data) {
+//       totalRelays24h.value = Number(result.data.relays || 0);
+//       totalComputeUnits24h.value = Number(result.data.claimed_compute_units || 0);
+//     } else {
+//       totalRelays24h.value = 0;
+//       totalComputeUnits24h.value = 0;
+//       console.error('Error loading 24h services summary:', result);
+//     }
+//   } catch (e) {
+//     totalRelays24h.value = 0;
+//     totalComputeUnits24h.value = 0;
+//     console.error('Error loading 24h services summary:', e);
+//   }
+// }
+
 async function loadServicesSummary24h() {
   try {
     const params = new URLSearchParams();
@@ -1005,6 +1027,7 @@ async function loadServicesSummary24h() {
     console.error('Error loading 24h services summary:', e);
   }
 }
+
 
 const historicalData = ref({
   series: [
