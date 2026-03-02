@@ -439,7 +439,7 @@ function goToLast() {
             <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
             <table class="table w-full rounded-xl">
                 <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-                <tr class="text-sm font-semibold">
+                <tr class="text-sm font-semibold bg-base-200">
                     <td style="width: 3rem">{{ $t('staking.rank') }}</td>
                     <td>Logo</td>
                     <td>{{ $t('staking.validator') }}</td>

@@ -570,7 +570,7 @@ onUnmounted(() => {
         <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
         <table class="table table-compact w-full">
           <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="border-b-[0px] text-sm font-semibold bg-base-200">
               <th>{{ $t('block.block_header') }}</th>
               <th>{{ $t('account.hash') }}</th>
               <th>{{ $t('block.proposer') }}</th>

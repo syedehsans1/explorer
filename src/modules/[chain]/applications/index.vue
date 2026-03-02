@@ -487,7 +487,7 @@ async function loadNetworkStats() {
       <div class="overflow-auto" style="max-height:calc(100vh - 22rem)">
       <table class="table w-full table-compact rounded-xl">
         <thead class="bg-base-200 dark:bg-[rgba(255,255,255,.03)] sticky top-0 border-0">
-          <tr class="text-sm font-semibold">
+          <tr class="text-sm font-semibold bg-base-200">
             <th>Rank</th>
             <th>Address</th>
             <th>Stake</th>
