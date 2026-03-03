@@ -836,6 +836,20 @@ function shortName(name: string, id: string) {
     : name;
 }
 
+const TX_TYPE_LABELS: Record<string, string> = {
+  'MsgSend (bank)': 'Send',
+  'MsgEditValidator (node)': 'EditValidator',
+  'MsgSubmitProof (proof)': 'SubmitProof',
+  'MsgCreateClaim (proof)': 'CreateClaim',
+};
+
+function formatTxType(type: string): string {
+  if (!type) return type;
+  if (TX_TYPE_LABELS[type]) return TX_TYPE_LABELS[type];
+  // Fallback: strip "Msg" prefix and " (module)" suffix
+  return type.replace(/^Msg/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 const comLinks = [
   {
     name: 'Website',
@@ -2033,7 +2047,7 @@ function formatBlockTime(secondsStr?: string | number) {
           <table class="table table-compact w-full bg-base-200">
             <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
               <tr class="border-none bg-base-200">
-                <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('block.block_header') }}</th>
+                <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('block.block') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('account.hash') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('block.proposer') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('module.tx') }}</th>
@@ -2070,7 +2084,9 @@ function formatBlockTime(secondsStr?: string | number) {
                     :to="`/${chain}/blocks/${block.height}`">{{ block.hash || block.id.split(":")[1] }}
                   </RouterLink>
                 </td>
-                <td>{{ format.validator(block.proposer) }}</td>
+                <td class="truncate" style="max-width: 8rem; overflow:hidden;">
+                  <span :title="format.validator(block.proposer)" class="truncate">{{ format.validator(block.proposer) }}</span>
+                </td>
                 <td>{{ (block.transaction_count ?? 0).toLocaleString() }}</td>
                 <td class="text-sm">{{ format.toDay(block.timestamp, 'from') }}</td>
                 <td class="">{{ formatBlockTime(block.block_production_time) }}</td>
@@ -2154,7 +2170,7 @@ function formatBlockTime(secondsStr?: string | number) {
                   {{ (isTxsNodeFallback && tx.status == 0) || tx.status || tx.tx_response?.code === 0 ? 'Success' : 'Failed' }}
                 </span>
               </td>
-              <td>{{ tx.type }}</td>
+              <td>{{ formatTxType(tx.type) }}</td>
               <td>{{ format.formatTokens([{ amount: tx.fee, denom: 'upokt' }]) }}</td>
               <td class="text-sm">{{ format.toDay(tx.timestamp, 'from') }}</td>
             </tr>

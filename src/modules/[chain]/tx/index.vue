@@ -471,6 +471,21 @@ function goToFirst() { currentPage.value = 1 }
 function goToLast() { currentPage.value = totalPages.value }
 function changePageSize(newSize: number) { itemsPerPage.value = newSize }
 
+// 🔹 Human-readable tx type labels
+const TX_TYPE_LABELS: Record<string, string> = {
+  'MsgSend (bank)': 'Send',
+  'MsgEditValidator (node)': 'EditValidator',
+  'MsgSubmitProof (proof)': 'SubmitProof',
+  'MsgCreateClaim (proof)': 'CreateClaim',
+}
+
+function formatTxType(type: string): string {
+  if (!type) return type
+  if (TX_TYPE_LABELS[type]) return TX_TYPE_LABELS[type]
+  // Fallback: strip "Msg" prefix and " (module)" suffix
+  return type.replace(/^Msg/, '').replace(/\s*\([^)]*\)\s*$/, '').trim()
+}
+
 // 🔹 Sender address helper
 function getSenderAddress(sender: string): string {
   if (!sender) return '';
@@ -718,7 +733,7 @@ onMounted(async () => {
                 {{ format.formatToken({ denom: 'upokt', amount: item.amount }) }}
               </td>
               <td class="dark:bg-base-200 dark:hover:bg-[rgba(255,255,255,0.06)] bg-white">
-                {{ item.type }}
+                {{ formatTxType(item.type) }}
               </td>
               <td class="dark:bg-base-200 dark:hover:bg-[rgba(255,255,255,0.06)] bg-white">
                 {{ format.formatToken({ denom: 'upokt', amount: item.fee }) }}
