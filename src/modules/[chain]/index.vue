@@ -174,7 +174,7 @@ interface ApiBlockItem {
   height: number;
   hash: string;
   timestamp: string;
-  // ✅ Server alag alag field names use kar sakta hai
+  //  Server alag alag field names use kar sakta hai
   block_production_time?: number;
   production_time?: number;
   block_time?: number;
@@ -183,7 +183,7 @@ interface ApiBlockItem {
   transaction_count?: number;
 }
 
-// ✅ Helper: kisi bhi field name se production time nikalo
+//  Helper: kisi bhi field name se production time nikalo
 function getBlockProductionTime(block: ApiBlockItem): number {
   return Number(
     block.block_production_time ||
@@ -204,9 +204,9 @@ const blocksTotal = ref(0);
 const blocksTotalPages = ref(0);
 const avgBlockProductionTime = ref<string | null>(null);
 
-// ✅ Track last known height to detect new blocks
+//  Track last known height to detect new blocks
 const lastKnownHeightDashboard = ref<number>(0)
-// ✅ Lock: ek waqt mein ek hi prepend operation chale
+//  Lock: ek waqt mein ek hi prepend operation chale
 const isPrependingDashboard = ref(false)
 
 // Fallback state for blocks
@@ -215,7 +215,7 @@ const blocksFallbackError = ref('');
 const isTxsNodeFallback = ref(false);
 const txsFallbackError = ref('');
 
-// ✅ Dashboard transactions auto-prepend tracking
+//  Dashboard transactions auto-prepend tracking
 const lastKnownTxHashDashboard = ref<string>('')
 const lastKnownTxBlockDashboard = ref<number>(0)
 const isPrependingTxsDashboard = ref(false)
@@ -276,7 +276,7 @@ const currentChainIndexerStatus = computed(() => {
   return indexerHealth.value.chains.find((c) => c.chain === apiChainName.value) || null;
 });
 
-// ✅ Node se sirf ek naya block fetch karo (primary source)
+//  Node se sirf ek naya block fetch karo (primary source)
 async function fetchSingleBlockNodeDashboard(height: number): Promise<ApiBlockItem | null> {
   try {
     // Current + previous block fetch karo production time ke liye
@@ -289,7 +289,7 @@ async function fetchSingleBlockNodeDashboard(height: number): Promise<ApiBlockIt
     const blockHeight = parseInt(block.block?.header?.height || '0')
     if (blockHeight !== height) return null
 
-    // ✅ Production time = current time - previous block time
+    //  Production time = current time - previous block time
     const currentTime = new Date(block.block?.header?.time || '').getTime()
     const prevTime = prevBlock
       ? new Date(prevBlock.block?.header?.time || '').getTime()
@@ -313,7 +313,7 @@ async function fetchSingleBlockNodeDashboard(height: number): Promise<ApiBlockIt
   }
 }
 
-// ✅ Server se specific height ka block fetch karo
+//  Server se specific height ka block fetch karo
 async function fetchSingleBlockServerDashboard(height: number): Promise<ApiBlockItem | null> {
   try {
     // Height-specific endpoint use karo
@@ -342,7 +342,7 @@ async function fetchSingleBlockServerDashboard(height: number): Promise<ApiBlock
   }
 }
 
-// ✅ Naya block table ke upar prepend karo - poora reload nahi
+//  Naya block table ke upar prepend karo - poora reload nahi
 async function prependNewBlockDashboard(height: number) {
   // Lock: ek waqt mein ek hi prepend chale
   if (isPrependingDashboard.value) return
@@ -380,7 +380,7 @@ async function prependNewBlockDashboard(height: number) {
   }
 }
 
-// ✅ Dashboard: server se latest txs fetch karo (prepend ke liye)
+//  Dashboard: server se latest txs fetch karo (prepend ke liye)
 async function fetchLatestTxsDashboard(limit = 10): Promise<any[]> {
   try {
     const chainVal = getApiChainName(blockchain.current?.chainName || props.chain || 'pocket-lego-testnet')
@@ -394,11 +394,11 @@ async function fetchLatestTxsDashboard(limit = 10): Promise<any[]> {
   }
 }
 
-// ✅ Dashboard transactions - local ref (base.allTxs direct mutate safe nahi hota)
+//  Dashboard transactions - local ref (base.allTxs direct mutate safe nahi hota)
 const dashboardTxs = ref<any[]>([])
 const dashboardTxsInitialized = ref(false)
 
-// ✅ base.allTxs load hone par dashboardTxs initialize karo
+//  base.allTxs load hone par dashboardTxs initialize karo
 watch(() => base.allTxs, (newTxs) => {
   if (newTxs && newTxs.length > 0 && !dashboardTxsInitialized.value) {
     dashboardTxs.value = [...newTxs]
@@ -408,7 +408,7 @@ watch(() => base.allTxs, (newTxs) => {
   }
 }, { immediate: true, deep: false })
 
-// ✅ Dashboard: naye transactions table ke upar prepend karo
+//  Dashboard: naye transactions table ke upar prepend karo
 async function prependNewTxsDashboard() {
   if (isPrependingTxsDashboard.value) return
   if (isTxsNodeFallback.value) return
@@ -436,7 +436,7 @@ async function prependNewTxsDashboard() {
     const newTxs = latestTxs.filter((tx: any) => !existingHashes.has(tx.hash))
     if (newTxs.length === 0) return
 
-    // ✅ Local ref mein prepend karo - Vue reactivity perfectly kaam karti hai
+    //  Local ref mein prepend karo - Vue reactivity perfectly kaam karti hai
     dashboardTxs.value = [...newTxs, ...dashboardTxs.value]
 
     // lastKnown update karo
@@ -447,7 +447,7 @@ async function prependNewTxsDashboard() {
   }
 }
 
-// ✅ Watch currentBlockHeight - jab naya block aaye sirf woh prepend karo
+//  Watch currentBlockHeight - jab naya block aaye sirf woh prepend karo
 watch(currentBlockHeight, async (newHeight, oldHeight) => {
   const newH = Number(newHeight)
   const oldH = Number(oldHeight)
@@ -465,7 +465,7 @@ watch(currentBlockHeight, async (newHeight, oldHeight) => {
   await prependNewBlockDashboard(newH)
 })
 
-// ✅ Watch currentBlockHeight - jab naya block aaye toh dashboard transactions bhi prepend karo
+//  Watch currentBlockHeight - jab naya block aaye toh dashboard transactions bhi prepend karo
 watch(currentBlockHeight, async (newHeight, oldHeight) => {
   const newH = Number(newHeight)
   const oldH = Number(oldHeight)
@@ -532,7 +532,7 @@ async function getBlocksFromNodeDashboard() {
 
     const validBlocks = fetchedBlocks.filter(block => block !== null)
 
-    // ✅ Production time calculate karo timestamps se
+    //  Production time calculate karo timestamps se
     const nodeBlocks = validBlocks.map((block: any, index: number) => {
       const currentTime = new Date(block.block?.header?.time || '').getTime()
       const prevBlock = validBlocks[index + 1] // next in array = older block
@@ -581,7 +581,7 @@ async function loadBlocks() {
     const result = JSON.parse(text);
 
     if (response.ok) {
-      // ✅ Field names normalize karo - server ke alag formats handle karo
+      //  Field names normalize karo - server ke alag formats handle karo
       const rawBlocks = result.data || [];
       
       // DEBUG: pehle block ka structure console mein dekho
@@ -591,7 +591,7 @@ async function loadBlocks() {
       
       blocks.value = rawBlocks.map((b: any) => ({
         ...b,
-        // ✅ Production time - string ya number dono handle - parseFloat baad mein karega
+        //  Production time - string ya number dono handle - parseFloat baad mein karega
         block_production_time: (
           b.block_production_time ??
           b.production_time ??
@@ -603,7 +603,7 @@ async function loadBlocks() {
           b.duration ??
           0
         ),
-        // ✅ Transaction count
+        //  Transaction count
         transaction_count: Number(
           b.transaction_count ??
           b.tx_count ??
@@ -785,7 +785,7 @@ onMounted(async () => {
   }
 
   base.getAllTxs(apiChainNameVal).then(() => {
-    // ✅ Transactions load hone ke baad lastKnownBlock set karo
+    //  Transactions load hone ke baad lastKnownBlock set karo
     if (base.allTxs && base.allTxs.length > 0) {
       lastKnownTxBlockDashboard.value = Math.max(...base.allTxs.map((tx: any) => Number(tx.block_height || 0)))
       lastKnownTxHashDashboard.value = base.allTxs[0]?.hash || ''
@@ -928,27 +928,6 @@ const networkStats = ref({
 const totalRelays24h = ref(0);
 const totalComputeUnits24h = ref(0);
 
-// async function loadServicesSummary24h() {
-//   try {
-//     const params = new URLSearchParams();
-//     params.append('window', '1');
-//     params.append('chain', apiChainName.value);
-//     const response = await fetch(`/api/v1/network-growth/summary?${params.toString()}`);
-//     const result = await response.json();
-//     if (response.ok && result?.data) {
-//       totalRelays24h.value = Number(result.data.relays || 0);
-//       totalComputeUnits24h.value = Number(result.data.claimed_compute_units || 0);
-//     } else {
-//       totalRelays24h.value = 0;
-//       totalComputeUnits24h.value = 0;
-//       console.error('Error loading 24h services summary:', result);
-//     }
-//   } catch (e) {
-//     totalRelays24h.value = 0;
-//     totalComputeUnits24h.value = 0;
-//     console.error('Error loading 24h services summary:', e);
-//   }
-// }
 
 async function loadServicesSummary24h() {
   try {
@@ -1229,7 +1208,7 @@ async function loadNetworkGrowthPerformance(windowDays: number = 7) {
 
     historicalData.value.series[4].data = relaysDaily as never[];
     historicalData.value.series[5].data = claimedCUDaily as never[];
-    historicalData.value.series[6].data = estimatedCUDaily as never[];
+    historicalData.value.series[6].data = claimedCUDaily as never[];
   } catch (e) {
     console.error('Error loading network growth performance:', e);
   }
@@ -2021,7 +2000,7 @@ function formatBlockTime(secondsStr?: string | number) {
 
     <!-- Tables Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
-      <!-- ✅ Blocks Table - Ab auto prepend hoga naye block aane par -->
+      <!--  Blocks Table - Ab auto prepend hoga naye block aane par -->
       <div class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-5 rounded-lg shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center">
@@ -2034,7 +2013,7 @@ function formatBlockTime(secondsStr?: string | number) {
           </RouterLink>
         </div>
 
-        <!-- 🔴 Fallback Warning Banner for Blocks -->
+        <!--  Fallback Warning Banner for Blocks -->
         <div
           v-if="isBlocksNodeFallback"
           :class="blocksFallbackError ? 'bg-red-100 border-red-400 text-red-700' : 'bg-yellow-100 border-yellow-400 text-yellow-700'"
@@ -2074,7 +2053,7 @@ function formatBlockTime(secondsStr?: string | number) {
               </tr>
             </tbody>
 
-            <!-- ✅ TransitionGroup: naya block smoothly upar se aata hai -->
+            <!--  TransitionGroup: naya block smoothly upar se aata hai -->
             <TransitionGroup
               v-if="!loadingBlocks && blocks.length > 0"
               name="block-slide"
@@ -2120,7 +2099,7 @@ function formatBlockTime(secondsStr?: string | number) {
           </RouterLink>
         </div>
 
-        <!-- 🔴 Fallback Warning Banner for Transactions -->
+        <!--  Fallback Warning Banner for Transactions -->
         <div
           v-if="isTxsNodeFallback"
           :class="txsFallbackError ? 'bg-red-100 border-red-400 text-red-700' : 'bg-yellow-100 border-yellow-400 text-yellow-700'"
@@ -2248,7 +2227,7 @@ function formatBlockTime(secondsStr?: string | number) {
   transform: translateZ(0);
 }
 
-/* ✅ Naye block ka smooth slide-down animation */
+/*  Naye block ka smooth slide-down animation */
 .block-slide-enter-active {
   transition: all 0.4s ease;
 }
@@ -2261,7 +2240,7 @@ function formatBlockTime(secondsStr?: string | number) {
   transform: translateY(0);
 }
 
-/* ✅ Last row fade out */
+/*  Last row fade out */
 .block-slide-leave-active {
   transition: all 0.3s ease;
 }
@@ -2273,12 +2252,12 @@ function formatBlockTime(secondsStr?: string | number) {
   transform: translateY(6px);
 }
 
-/* ✅ Baaki rows ka smooth shift */
+/*  Baaki rows ka smooth shift */
 .block-slide-move {
   transition: transform 0.4s ease;
 }
 
-/* ✅ Transaction slide animation */
+/*  Transaction slide animation */
 .tx-slide-enter-active { transition: all 0.4s ease; }
 .tx-slide-enter-from { opacity: 0; transform: translateY(-12px); }
 .tx-slide-enter-to { opacity: 1; transform: translateY(0); }
