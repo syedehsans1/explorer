@@ -525,7 +525,7 @@ onUnmounted(() => {
       <div class="flex items-center">
         <Icon :icon="fallbackError ? 'mdi:alert-octagon' : 'mdi:alert-circle'" class="mr-2 text-xl" />
         <span class="font-medium">
-          <span v-if="!fallbackError">Currently showing data from node because main server is down.</span>
+          <span v-if="!fallbackError">Our system is temporarily under maintenance. You’re currently viewing live data from an alternative source.</span>
           <span v-else>Unable to load data: {{ fallbackError }}. Please check your RPC connection or try again later.</span>
         </span>
       </div>

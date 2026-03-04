@@ -2037,7 +2037,7 @@ function formatBlockTime(secondsStr?: string | number) {
           <div class="flex items-center">
             <Icon :icon="blocksFallbackError ? 'mdi:alert-octagon' : 'mdi:alert-circle'" class="mr-2 text-lg" />
             <span class="text-sm font-medium">
-              <span v-if="!blocksFallbackError">Currently showing data from node because main server is down.</span>
+              <span v-if="!blocksFallbackError">Our system is temporarily under maintenance. You’re currently viewing live data from an alternative source.</span>
               <span v-else>Unable to load blocks: {{ blocksFallbackError }}</span>
             </span>
           </div>
@@ -2125,7 +2125,7 @@ function formatBlockTime(secondsStr?: string | number) {
           <div class="flex items-center">
             <Icon :icon="txsFallbackError ? 'mdi:alert-octagon' : 'mdi:alert-circle'" class="mr-2 text-lg" />
             <span class="text-sm font-medium">
-              <span v-if="!txsFallbackError">Currently showing data from node because main server is down.</span>
+              <span v-if="!txsFallbackError">Our system is temporarily under maintenance. You’re currently viewing live data from an alternative source.</span>
               <span v-else>Unable to load transactions: {{ txsFallbackError }}</span>
             </span>
           </div>
