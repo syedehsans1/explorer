@@ -1515,7 +1515,9 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
     </div>
 
     <!-- Service Rewards Breakdown - Show in Summary tab -->
-    <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
+    <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" 
+      class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto"
+    >
       <div class="flex items-center justify-between mb-3 ml-4 mr-4">
         <div class="text-base font-semibold text-main flex items-center gap-2">
           <Icon icon="mdi:chart-pie" class="text-lg" />
@@ -1532,7 +1534,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </div>
         <table v-else class="table w-full table-compact">
           <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Service</th>
               <th>Operator Address</th>
               <th>Application Address</th>
@@ -1684,7 +1686,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </div>
         <table v-else class="table w-full table-compact">
           <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Rank</th>
               <th>Service</th>
               <th>Compute Units</th>
@@ -1802,7 +1804,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         <div class="bg-base-200 rounded-md overflow-auto h-[35vh]">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Tx Hash</th>
                 <th>Service</th>
                 <th>Supplier</th>
@@ -1992,7 +1994,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         <div v-else class="bg-base-200 rounded-md overflow-auto h-[600px]">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Rank</th>
                 <th>Service</th>
                 <th>Compute Units</th>
@@ -2068,7 +2070,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         <div v-else class="bg-base-200 rounded-md overflow-auto h-[40vh]">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Service ID</th>
                 <th>Compute Units</th>
                 <th>Claims</th>
@@ -2143,7 +2145,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div class="bg-base-200 rounded-md overflow-auto h-[40vh]">
             <table class="table w-full table-compact">
               <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-                <tr class="border-b-[0px] text-sm font-semibold">
+                <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                   <th>Rank</th>
                   <th>Validator</th>
                   <th>Rewards (POKT)</th>
@@ -2214,7 +2216,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div class="bg-base-200 rounded-md overflow-auto h-[40vh]">
             <table class="table w-full table-compact">
               <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-                <tr class="border-b-[0px] text-sm font-semibold">
+                <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                   <th>Validator</th>
                   <th>Rewards/CU</th>
                   <th>Reward/Relay</th>
@@ -2268,7 +2270,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div class="bg-base-200 rounded-md overflow-auto h-[40vh]">
             <table class="table w-full table-compact">
               <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-                <tr class="border-b-[0px] text-sm font-semibold">
+                <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                   <th>Validator</th>
                   <th>Total Rewards</th>
                   <th>Services</th>

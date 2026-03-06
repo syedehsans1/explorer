@@ -830,7 +830,7 @@ onMounted(() => {
         <div class="bg-base-200 rounded-md overflow-auto" style="max-height: 600px;">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Rank</th>
                 <th>Service</th>
                 <th>Chain</th>

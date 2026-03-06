@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useBlockchain, useFormatter } from '@/stores';
 import { PageRequest, type Pagination, type Supplier } from '@/types';
 import type { PaginatedBalances } from '@/types/bank'
+import { Icon } from '@iconify/vue'
 const props = defineProps(['chain']);
 const blockchain = useBlockchain()
 
@@ -28,12 +29,32 @@ const totalPages = computed(() => {
 
 const totalSuppliers = computed(() => parseInt(pageResponse.value.total || '0'));
 
-// 🔹 Client-side sorting (applied after server returns page data)
+// Filter and sort state
+const statusFilter = ref('all');
+const sortBy = ref<'stake' | 'services'>('stake');
+const sortOrder = ref<'desc' | 'asc'>('desc');
+
+// 🔹 Client-side filtering and sorting
 const sortedList = computed(() => {
-  return [...list.value].sort((a: any, b: any) => {
-    const aValue = parseInt(a.stake.amount || '0');
-    const bValue = parseInt(b.stake.amount || '0');
-    return bValue - aValue; // descending order
+  let filtered = list.value.filter((item: any) => {
+    if (statusFilter.value === 'all') return true;
+    const status = getSupplierStatus(item);
+    if (statusFilter.value === 'staked') return status.label === 'Staked';
+    if (statusFilter.value === 'unstaked') return status.label === 'Unstaked';
+    if (statusFilter.value === 'unstaking') return status.label === 'Unstaking';
+    return true;
+  });
+
+  return [...filtered].sort((a: any, b: any) => {
+    if (sortBy.value === 'services') {
+      const aLen = a.services?.length || 0;
+      const bLen = b.services?.length || 0;
+      return sortOrder.value === 'desc' ? bLen - aLen : aLen - bLen;
+    }
+    // default: stake
+    const aValue = parseInt(a.stake?.amount || '0');
+    const bValue = parseInt(b.stake?.amount || '0');
+    return sortOrder.value === 'desc' ? bValue - aValue : aValue - bValue;
   });
 });
 
@@ -295,6 +316,47 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
           <div class="text-xs text-[#64748B]">Unstaking Tokens (24h)</div>
           <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens24h.toString() }) }}</div>
         </span>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="bg-[#ffffff] p-4 mb-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- Status Filter -->
+        <div class="flex items-center gap-1.5">
+          <Icon icon="mdi:check-circle-outline" class="text-base-content/60 text-sm" />
+          <select
+            v-model="statusFilter"
+            class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-28 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <option value="all">All</option>
+            <option value="staked">Staked</option>
+            <option value="unstaked">Unstaked</option>
+            <option value="unstaking">Unstaking</option>
+          </select>
+        </div>
+
+        <!-- Sort By -->
+        <div class="flex items-center gap-1.5">
+          <Icon icon="mdi:sort" class="text-base-content/60 text-sm" />
+          <select
+            v-model="sortBy"
+            class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-32 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <option value="stake">Stake</option>
+            <option value="services">Services</option>
+          </select>
+        </div>
+
+        <!-- Sort Order Toggle -->
+        <button
+          @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+          class="btn btn-xs h-8 min-h-8 px-2 gap-1"
+          :class="sortOrder === 'desc' ? 'btn-primary' : 'btn-ghost'"
+          :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'"
+        >
+          <Icon :icon="sortOrder === 'desc' ? 'mdi:sort-descending' : 'mdi:sort-ascending'" class="text-sm" />
+        </button>
       </div>
     </div>
 

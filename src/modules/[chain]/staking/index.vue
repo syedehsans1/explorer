@@ -50,14 +50,17 @@ const selfBonded = ref({
   }
 } as Delegation);
 
-// Status filter - default "Staked" selected
-const selectedStatus = ref('BOND_STATUS_BONDED');
+// Status filter - default "All" selected
+const selectedStatus = ref('all');
 const statusOptions = [
   { value: 'all', label: 'All' },
   { value: 'BOND_STATUS_BONDED', label: 'Staked' },
   { value: 'BOND_STATUS_UNBONDING', label: 'Unstaking' },
   { value: 'BOND_STATUS_UNBONDED', label: 'Unstaked' }
 ];
+
+const sortBy = ref<'voting_power' | 'commission'>('voting_power');
+const sortOrder = ref<'desc' | 'asc'>('desc');
 
 addresses.value.account = operatorAddressToAccount(validator);
 // load self bond
@@ -231,6 +234,18 @@ const validatorsList = computed(() => {
       v => v.status === selectedStatus.value
     )
   }
+
+  filtered = [...filtered].sort((a, b) => {
+    if (sortBy.value === 'commission') {
+      const aRate = parseFloat(a.commission?.commission_rates?.rate || '0')
+      const bRate = parseFloat(b.commission?.commission_rates?.rate || '0')
+      return sortOrder.value === 'desc' ? bRate - aRate : aRate - bRate
+    }
+    // default: voting_power
+    const diff = Number(b.delegator_shares) - Number(a.delegator_shares)
+    return sortOrder.value === 'desc' ? diff : -diff
+  })
+
   const activeCount = filtered.filter(v => v.status === 'BOND_STATUS_BONDED').length;
   return filtered.map((x, i) => ({
     v: x,
@@ -405,151 +420,169 @@ function goToLast() {
                     <div class="font-bold">{{ format.percent(slashing.slash_fraction_downtime) }}</div>
                 </span>
             </div>
+        </div> 
+           
+        <div class="bg-[#ffffff] p-4 mb-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+            <!-- Filter Bar -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <!-- Status Filter -->
+                <div class="flex items-center gap-1.5">
+                    <Icon icon="mdi:check-circle-outline" class="text-base-content/60 text-sm" />
+                    <select
+                        v-model="selectedStatus"
+                        class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-32 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+                    >
+                        <option v-for="option in statusOptions" :key="option.value" :value="option.value">
+                            {{ option.label }}
+                        </option>
+                    </select>
+                </div>
+
+                <!-- Sort By -->
+                <div class="flex items-center gap-1.5">
+                    <Icon icon="mdi:sort" class="text-base-content/60 text-sm" />
+                    <select
+                        v-model="sortBy"
+                        class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-40 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+                    >
+                        <option value="voting_power">Voting Power</option>
+                        <option value="commission">Commission</option>
+                    </select>
+                </div>
+
+                <!-- Sort Order Toggle -->
+                <button
+                    @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+                    class="btn btn-xs h-8 min-h-8 px-2 gap-1"
+                    :class="sortOrder === 'desc' ? 'btn-primary' : 'btn-ghost'"
+                    :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'"
+                >
+                    <Icon :icon="sortOrder === 'desc' ? 'mdi:sort-descending' : 'mdi:sort-ascending'" class="text-sm" />
+                </button>
+            </div>
         </div>    
 
         <!-- Validators Table Section -->
         <div class="flex flex-col gap-1 bg-white dark:bg-[rgba(255,255,255,.03)] rounded-xl shadow-md border dark:border-white/10 overflow-hidden mb-4">
-            <!-- Status Filter Tabs -->
-            <div class="">
-                <div class="flex items-center bg-white dark:bg-[rgba(255,255,255,.05)] rounded-lg border border-gray-200 dark:border-white/10 px-4 py-3 inline-flex gap-1">
-                    <button
-                        v-for="option in statusOptions"
-                        :key="option.value"
-                        @click="selectedStatus = option.value"
-                        :class="[
-                            'px-4 py-2 rounded-md text-sm font-medium transition-all duration-200',
-                            selectedStatus === option.value 
-                                ? 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 bg-[#007bff] text-white shadow-sm'
-                                : 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 bg-base-100 text-base-content hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]  border border-base-300 dark:border-base-400'
-                        ]"
-                    >
-                        {{ option.label }}
-                    </button>
-                </div>
-            </div>
-
             <div v-if="isLoading" class="flex justify-center items-center p-8 rounded-xl">
                 <span class="loading loading-spinner loading-lg"></span>
             </div>
 
-            <div
-            v-else
-            class="bg-base-200 hover:bg-base-300 dark:bg-[rgba(255,255,255,.03)] rounded-xl dark:border-base-200 px-4 pt-2 pb-2"
-            >
+            <div v-else class="bg-base-200 hover:bg-base-300 dark:bg-[rgba(255,255,255,.03)] rounded-xl dark:border-base-200 px-4 pt-2 pb-2">
             <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
-            <table class="table w-full rounded-xl">
-                <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-                <tr class="text-sm font-semibold bg-base-200">
-                    <td style="width: 3rem">{{ $t('staking.rank') }}</td>
-                    <td>Logo</td>
-                    <td>{{ $t('staking.validator') }}</td>
-                    <td class="text-center">{{ $t('staking.status') }}</td>
-                    <td class="text-right">{{ $t('staking.voting_power') }}</td>
-                    <td class="text-right">{{ $t('staking.24h_changes') }}</td>
-                    <td class="text-right">{{ $t('staking.self_bonded') }}</td>
-                    <td class="text-right">{{ $t('staking.commission') }}</td>
-                    <td class="text-right">{{ $t('staking.max_commission') }}</td>
-                </tr>
-                </thead>
+                <table class="table w-full rounded-xl">
+                    <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
+                        <tr class="text-sm font-semibold bg-base-200">
+                            <td style="width: 3rem">{{ $t('staking.rank') }}</td>
+                            <td>Logo</td>
+                            <td>{{ $t('staking.validator') }}</td>
+                            <td class="text-center">{{ $t('staking.status') }}</td>
+                            <td class="text-right">{{ $t('staking.voting_power') }}</td>
+                            <td class="text-right">{{ $t('staking.24h_changes') }}</td>
+                            <td class="text-right">{{ $t('staking.self_bonded') }}</td>
+                            <td class="text-right">{{ $t('staking.commission') }}</td>
+                            <td class="text-right">{{ $t('staking.max_commission') }}</td>
+                        </tr>
+                    </thead>
 
-                <tbody>
-                <tr
-                    v-for="({ v, rank, logo, statusBadge }, i) in paginatedValidators"
-                    :key="v.operator_address"
-                    class="hover:bg-gray-100 dark:hover:bg-[rgba(255,255,255,0.06)] dark:bg-base-200 bg-white border-0 rounded-xl"
-                >
-                    <!-- rank -->
-                    <td>
-                    <div
-                        class="text-xs truncate relative px-2 py-1 rounded-full w-fit"
-                        :class="`text-${rank}`"
-                    >
-                        {{ i + 1 + (currentPage - 1) * itemsPerPage }}
-                    </div>
-                    </td>
-                    <td>
-                        <img v-if="logo" :src="logo" class="w-8 h-8 rounded-full mr-2" style="display: inline-block;" /> 
-                        <Icon v-else class="text-2xl" :icon="`mdi-help-circle-outline`" />
-                    </td>
-                    <!-- Validator -->
-                    <td>
-                    <div class="flex items-center overflow-hidden" style="max-width: 300px">
-                        <div class="flex flex-col">
-                        <span
-                            class="text-sm text-primary dark:invert whitespace-nowrap overflow-hidden"
+                    <tbody>
+                        <tr
+                            v-for="({ v, rank, logo, statusBadge }, i) in paginatedValidators"
+                            :key="v.operator_address"
+                            class="hover:bg-gray-100 dark:hover:bg-[rgba(255,255,255,0.06)] dark:bg-base-200 bg-white border-0 rounded-xl"
                         >
-                            <RouterLink
-                            :to="{
-                                name: 'chain-staking-validator',
-                                params: { validator: v.operator_address },
-                            }"
-                            class="font-weight-medium"
+                            <!-- rank -->
+                            <td>
+                            <div
+                                class="text-xs truncate relative px-2 py-1 rounded-full w-fit"
+                                :class="`text-${rank}`"
                             >
-                            {{ v.description?.moniker }}
-                            </RouterLink>
-                        </span>
-                        <span class="text-[10px]">{{
-                            v.operator_address || v.description?.identity || '-'
-                        }}</span>
-                        </div>
-                    </div>
-                    </td>
+                                {{ i + 1 + (currentPage - 1) * itemsPerPage }}
+                            </div>
+                            </td>
+                            <td>
+                                <img v-if="logo" :src="logo" class="w-8 h-8 rounded-full mr-2" style="display: inline-block;" /> 
+                                <Icon v-else class="text-2xl" :icon="`mdi-help-circle-outline`" />
+                            </td>
+                            <!-- Validator -->
+                            <td>
+                            <div class="flex items-center overflow-hidden" style="max-width: 300px">
+                                <div class="flex flex-col">
+                                <span
+                                    class="text-sm text-primary dark:invert whitespace-nowrap overflow-hidden"
+                                >
+                                    <RouterLink
+                                    :to="{
+                                        name: 'chain-staking-validator',
+                                        params: { validator: v.operator_address },
+                                    }"
+                                    class="font-weight-medium"
+                                    >
+                                    {{ v.description?.moniker }}
+                                    </RouterLink>
+                                </span>
+                                <span class="text-[10px]">{{
+                                    v.operator_address || v.description?.identity || '-'
+                                }}</span>
+                                </div>
+                            </div>
+                            </td>
 
-                    <!-- Status -->
-                    <td class="text-center">
-                    <div class="badge" :class="statusBadge.class">{{ statusBadge.text }}</div>
-                    </td>
+                            <!-- Status -->
+                            <td class="text-center">
+                            <div class="badge" :class="statusBadge.class">{{ statusBadge.text }}</div>
+                            </td>
 
-                    <!-- Voting Power -->
-                    <td class="text-right">
-                    <div class="flex flex-col">
-                        <h6 class="text-sm font-weight-medium whitespace-nowrap">
-                        {{
-                            format.formatToken(
-                            {
-                                amount: parseInt(v.tokens).toString(),
-                                denom: staking.params.bond_denom,
-                            },
-                            true,
-                            '0,0'
-                            )
-                        }}
-                        </h6>
-                        <span class="text-xs">{{
-                        format.calculatePercent(v.delegator_shares, staking.totalPower)
-                        }}</span>
-                    </div>
-                    </td>
+                            <!-- Voting Power -->
+                            <td class="text-right">
+                            <div class="flex flex-col">
+                                <h6 class="text-sm font-weight-medium whitespace-nowrap">
+                                {{
+                                    format.formatToken(
+                                    {
+                                        amount: parseInt(v.tokens).toString(),
+                                        denom: staking.params.bond_denom,
+                                    },
+                                    true,
+                                    '0,0'
+                                    )
+                                }}
+                                </h6>
+                                <span class="text-xs">{{
+                                format.calculatePercent(v.delegator_shares, staking.totalPower)
+                                }}</span>
+                            </div>
+                            </td>
 
-                    <!-- 24h Changes -->
-                    <td
-                    class="text-right text-xs text-black"
-                    :class="change24Color(v)"
-                    >
-                    {{ change24Text(v) }}
-                    </td>
+                            <!-- 24h Changes -->
+                            <td
+                            class="text-right text-xs text-black"
+                            :class="change24Color(v)"
+                            >
+                            {{ change24Text(v) }}
+                            </td>
 
-                    <!-- Self Bonded -->
-                    <td class="text-xs text-right">
-                    {{
-                        selfBonded?.balance
-                        ? format.formatToken(selfBonded.balance)
-                        : '0'
-                    }}
-                    </td>
+                            <!-- Self Bonded -->
+                            <td class="text-xs text-right">
+                            {{
+                                selfBonded?.balance
+                                ? format.formatToken(selfBonded.balance)
+                                : '0'
+                            }}
+                            </td>
 
-                    <!-- Commission -->
-                    <td class="text-right text-xs">
-                    {{ format.formatCommissionRate(v.commission?.commission_rates?.rate) }}
-                    </td>
+                            <!-- Commission -->
+                            <td class="text-right text-xs">
+                            {{ format.formatCommissionRate(v.commission?.commission_rates?.rate) }}
+                            </td>
 
-                    <!-- Max commission -->
-                    <td class="text-right text-xs">
-                    {{ format.formatCommissionRate(v.commission?.commission_rates?.max_rate) }}
-                    </td>
-                </tr>
-                </tbody>
-            </table>
+                            <!-- Max commission -->
+                            <td class="text-right text-xs">
+                            {{ format.formatCommissionRate(v.commission?.commission_rates?.max_rate) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
 
             <!-- Pagination Section -->

@@ -307,7 +307,7 @@ function changePage(delta: number) {
       <div class="bg-base-200 rounded-md overflow-auto">
         <table class="table table-compact w-full">
           <thead class="dark:bg-base-100 bg-base-200 sticky top-0 border-0">
-            <tr>
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Moniker</th>
               <th>Domain</th>
               <th class="text-right">Relays</th>
