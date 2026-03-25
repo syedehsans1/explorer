@@ -953,8 +953,8 @@ async function loadServicesSummary24h() {
     if (!text) throw new Error('Empty response from API');
     const result = JSON.parse(text);
     if (response.ok && result?.data) {
-      totalRelays24h.value = Number(result.data.estimated_relays || 0);
-      totalComputeUnits24h.value = Number(result.data.estimated_compute_units || 0);
+      totalRelays24h.value = Number(result.data.relays || 0);
+      totalComputeUnits24h.value = Number(result.data.claimed_compute_units || 0);
     } else {
       totalRelays24h.value = 0;
       totalComputeUnits24h.value = 0;
