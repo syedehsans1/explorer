@@ -9,6 +9,7 @@ import {
   type Supplier,
   type Application
 } from '@/types';
+import TablePagination from '@/components/TablePagination.vue';
 
 const props = defineProps<{ chain: string }>();
 
@@ -129,29 +130,12 @@ async function loadServices() {
   }
 }
 
-// 🔹 Pagination methods
-function goToFirst() {
-  if (currentPage.value !== 1) {
-    currentPage.value = 1;
-  }
+function setCurrentPage(page: number) {
+  currentPage.value = page;
 }
 
-function goToLast() {
-  if (currentPage.value !== totalPages.value && totalPages.value > 0) {
-    currentPage.value = totalPages.value;
-  }
-}
-
-function nextPage() {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++;
-  }
-}
-
-function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value--;
-  }
+function setItemsPerPage(size: number) {
+  itemsPerPage.value = size;
 }
 
 async function waitForRpc() {
@@ -349,66 +333,16 @@ onMounted(async () => {
       </table>
       </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <!-- Page Size Dropdown -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">Show:</span>
-          <select 
-            v-model="itemsPerPage" 
-            class="select select-bordered select-sm w-20"
-          >
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-          <span class="text-sm text-gray-600">per page</span>
-        </div>
-
-        <!-- Pagination Info and Controls -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalServices) }} of {{ totalServices }} services
-          </span>
-          
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-              @click="prevPage"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage" 
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast" 
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>
-      </div>
+      <TablePagination
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :total-items="totalServices"
+        :items-per-page="itemsPerPage"
+        item-label="services"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setCurrentPage"
+        @update:items-per-page="setItemsPerPage"
+      />
     </div>
   </div>
 </template>
@@ -421,14 +355,3 @@ onMounted(async () => {
   }
 }
 </route>
-
-<style scoped>
-.page-btn:hover {
-  background-color: #e9ecef;
-}
-
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-</style>

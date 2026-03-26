@@ -9,6 +9,7 @@ import { RouterLink } from 'vue-router';
 import ValidatorFilterModal from '../components/ValidatorFilterModal.vue';
 import { Icon } from '@iconify/vue';
 import { fetchTransactions, type ApiTransaction, type TransactionFilters } from '@/libs/transactions';
+import TablePagination from '@/components/TablePagination.vue';
 
 const props = defineProps(['chain']);
 const chainStore = useBlockchain();
@@ -212,6 +213,14 @@ watch([currentTxPage, txItemsPerPage], () => {
     loadTransactions();
   }
 });
+
+function setCurrentTxPage(page: number) {
+  currentTxPage.value = page;
+}
+
+function setTxItemsPerPage(size: number) {
+  txItemsPerPage.value = size;
+}
 
 watch(activeTab, (newTab) => {
   if (newTab === 'transactions') {
@@ -660,64 +669,16 @@ watch(activeTab, (newTab) => {
           </table>
         </div>
 
-        <!-- Pagination -->
-        <div class="flex justify-between items-center gap-4 my-6 px-6">
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">Show:</span>
-            <select 
-              v-model="txItemsPerPage" 
-              class="select select-bordered select-sm w-20"
-            >
-              <option :value="10">10</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </select>
-            <span class="text-sm text-gray-600">per page</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">
-              Showing {{ ((currentTxPage - 1) * txItemsPerPage) + 1 }} to {{ Math.min(currentTxPage * txItemsPerPage, totalTxCount) }} of {{ totalTxCount }} transactions
-            </span>
-            
-            <div class="flex items-center gap-1">
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="currentTxPage = 1"
-                :disabled="currentTxPage === 1 || totalTxPages === 0"
-              >
-                First
-              </button>
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="currentTxPage--"
-                :disabled="currentTxPage === 1 || totalTxPages === 0"
-              >
-                &lt;
-              </button>
-
-              <span class="text-xs px-2">
-                Page {{ currentTxPage }} of {{ totalTxPages }}
-              </span>
-
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="currentTxPage++"
-                :disabled="currentTxPage === totalTxPages || totalTxPages === 0"
-              >
-                &gt;
-              </button>
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="currentTxPage = totalTxPages"
-                :disabled="currentTxPage === totalTxPages || totalTxPages === 0"
-              >
-                Last
-              </button>
-            </div>
-          </div>
-        </div>
+        <TablePagination
+          :current-page="currentTxPage"
+          :total-pages="totalTxPages"
+          :total-items="totalTxCount"
+          :items-per-page="txItemsPerPage"
+          item-label="transactions"
+          :page-size-options="[10, 25, 50, 100]"
+          @update:current-page="setCurrentTxPage"
+          @update:items-per-page="setTxItemsPerPage"
+        />
       </div>
     </div>
 

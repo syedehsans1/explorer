@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router';
 import { Icon } from '@iconify/vue';
 import ApexCharts from 'vue3-apexcharts';
 import { useBlockchain, useFormatter } from '@/stores';
+import TablePagination from '@/components/TablePagination.vue';
 
 const props = defineProps<{
   chain?: string;
@@ -541,6 +542,14 @@ watch(serviceRewardsPage, () => {
   loadServiceRewards();
 });
 
+function setServiceRewardsPage(page: number) {
+  serviceRewardsPage.value = page;
+}
+
+function setServiceRewardsLimit(size: number) {
+  serviceRewardsLimit.value = size;
+}
+
 watch([serviceRewardsSortBy, serviceRewardsSortOrder], () => {
   loadServiceRewards();
 });
@@ -890,66 +899,17 @@ onMounted(() => {
             </tbody>
           </table>
         </div>
-        <!-- Pagination Bar -->
-        <div v-if="serviceRewardsMeta" class="flex justify-between items-center gap-4 my-6 px-2">
-          <!-- Page Size Dropdown -->
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">Show:</span>
-            <select 
-              v-model="serviceRewardsLimit" 
-              class="select select-bordered select-sm w-20"
-            >
-              <option :value="10">10</option>
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </select>
-            <span class="text-sm text-gray-600">per page</span>
-          </div>
-
-          <!-- Pagination Info and Controls -->
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">
-              Showing {{ ((serviceRewardsPage - 1) * serviceRewardsLimit) + 1 }} to {{ Math.min(serviceRewardsPage * serviceRewardsLimit, serviceRewardsMeta.total) }} of {{ formatNumber(serviceRewardsMeta.total) }} services
-            </span>
-            
-            <div class="flex items-center gap-1">
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="serviceRewardsPage = 1"
-                :disabled="serviceRewardsPage === 1 || serviceRewardsMeta.totalPages === 0"
-              >
-                First
-              </button>
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="serviceRewardsPage = Math.max(1, serviceRewardsPage - 1)"
-                :disabled="serviceRewardsPage === 1 || serviceRewardsMeta.totalPages === 0"
-              >
-                &lt;
-              </button>
-
-              <span class="text-xs px-2">
-                Page {{ serviceRewardsPage }} of {{ serviceRewardsMeta.totalPages }}
-              </span>
-
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="serviceRewardsPage = Math.min(serviceRewardsMeta.totalPages, serviceRewardsPage + 1)"
-                :disabled="serviceRewardsPage === serviceRewardsMeta.totalPages || serviceRewardsMeta.totalPages === 0"
-              >
-                &gt;
-              </button>
-              <button
-                class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="serviceRewardsPage = serviceRewardsMeta.totalPages"
-                :disabled="serviceRewardsPage === serviceRewardsMeta.totalPages || serviceRewardsMeta.totalPages === 0"
-              >
-                Last
-              </button>
-            </div>
-          </div>
-        </div>
+        <TablePagination
+          v-if="serviceRewardsMeta"
+          :current-page="serviceRewardsPage"
+          :total-pages="serviceRewardsMeta.totalPages"
+          :total-items="serviceRewardsMeta.total"
+          :items-per-page="serviceRewardsLimit"
+          item-label="services"
+          :page-size-options="[10, 25, 50, 100]"
+          @update:current-page="setServiceRewardsPage"
+          @update:items-per-page="setServiceRewardsLimit"
+        />
       </div>
     </div>
     </div>
@@ -960,12 +920,4 @@ onMounted(() => {
   .table { font-size: 0.75rem; }
   th, td { padding: 0.5rem; }
 }
-.page-btn:hover {
-  background-color: #e9ecef;
-}
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 </style>
-

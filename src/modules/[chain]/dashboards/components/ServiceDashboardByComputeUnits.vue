@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue';
 import ApexCharts from 'vue3-apexcharts';
 import { useBlockchain, useFormatter } from '@/stores';
 import { fetchNetworkAverages, fetchTopPerformers, calculateGrowthRates, calculateTrends, type NetworkAverages, type TopPerformersThreshold } from '../composables/useSupplierAnalytics';
+import TablePagination from '@/components/TablePagination.vue';
 
 const props = defineProps<{
   chain?: string;
@@ -204,6 +205,7 @@ interface TopServiceByPerformance {
 const loading = ref(false);
 const summaryStats = ref<SummaryStats | null>(null);
 const claims = ref<Claim[]>([]);
+const claimsTotalCount = ref(0);
 const rewardAnalytics = ref<RewardAnalytics[]>([]);
 const currentPage = ref(1);
 const currentPages = ref(1);
@@ -896,10 +898,12 @@ async function loadClaims() {
         compute_unit_efficiency: Number(item.compute_unit_efficiency) || 0,
         reward_per_relay: Number(item.reward_per_relay) || 0,
       }));
+      claimsTotalCount.value = data.meta?.total || claims.value.length;
       totalPages.value = data.meta?.totalPages || 0;
   } catch (error: any) {
     console.error('Error loading claims:', error);
     claims.value = [];
+    claimsTotalCount.value = 0;
     totalPages.value = 0;
   } finally {
     loading.value = false;
@@ -919,29 +923,35 @@ const rewardPaginatedTopServices = computed(() => {
   return topServicesByPerformance.value.slice(start, end);
 });
 
-function goToFirstReward() { rewardCurrentPage.value = 1; }
-function goToLastReward() { rewardCurrentPage.value = rewardTotalPages.value; }
-function goToPrevReward() { if (rewardCurrentPage.value > 1) rewardCurrentPage.value--; }
-function goToNextReward() { if (rewardCurrentPage.value < rewardTotalPages.value) rewardCurrentPage.value++; }
+function setServiceRewardsPage(page: number) {
+  serviceRewardsCurrentPage.value = page;
+}
 
+function setServiceRewardsItemsPerPage(size: number) {
+  serviceRewardsItemsPerPage.value = size;
+}
 
-function nextPage() { if (currentPage.value < totalPages.value) { currentPage.value++; loadClaims(); } }
-function prevPage() { if (currentPage.value > 1) { currentPage.value--; loadClaims(); } }
-function goToFirst() { currentPage.value = 1; loadClaims(); }
-function goToLast() { currentPage.value = totalPages.value; loadClaims(); }
+function setRewardPage(page: number) {
+  rewardCurrentPage.value = page;
+}
 
-function nPage() { if (currentPages.value < totalPages.value) { currentPages.value++; loadClaims(); } }
-function pPage() { if (currentPages.value > 1) { currentPages.value--; loadClaims(); } }
-function gTFirst() { currentPages.value = 1; loadClaims(); }
-function gTLast() { currentPages.value = totalPages.value; loadClaims(); }
+function setRewardItemsPerPage(size: number) {
+  rewardItemsPerPage.value = size;
+  rewardCurrentPage.value = 1;
+  loadTopServicesByPerformance();
+}
 
-const startItem = computed(() =>
-  rewardTotalItems.value === 0 ? 0 : (rewardCurrentPage.value - 1) * rewardItemsPerPage.value + 1
-);
+function setClaimsPage(page: number) {
+  if (currentPage.value === page) return;
+  currentPage.value = page;
+  loadClaims();
+}
 
-const endItem = computed(() =>
-  Math.min(rewardCurrentPage.value * rewardItemsPerPage.value, rewardTotalItems.value)
-);
+function setClaimsItemsPerPage(size: number) {
+  itemsPerPage.value = size;
+  currentPage.value = 1;
+  loadClaims();
+}
 
 
 async function loadTopServicesByComputeUnits() {
@@ -1595,59 +1605,16 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-secondary">Show:</span>
-          <select v-model="serviceRewardsItemsPerPage" class="select select-bordered select-xs w-20">
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((serviceRewardsCurrentPage - 1) * serviceRewardsItemsPerPage) + 1 }} to {{ Math.min(serviceRewardsCurrentPage * serviceRewardsItemsPerPage, serviceRewardsTotalCount) }} of {{ serviceRewardsTotalCount }} rewards
-          </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage = 1"
-              :disabled="serviceRewardsCurrentPage === 1 || serviceRewardsTotalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage--"
-              :disabled="serviceRewardsCurrentPage === 1 || serviceRewardsTotalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ serviceRewardsCurrentPage }} of {{ serviceRewardsTotalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage++"
-              :disabled="serviceRewardsCurrentPage === serviceRewardsTotalPages || serviceRewardsTotalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage = serviceRewardsTotalPages"
-              :disabled="serviceRewardsCurrentPage === serviceRewardsTotalPages || serviceRewardsTotalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>  
-      </div>  
+      <TablePagination
+        :current-page="serviceRewardsCurrentPage"
+        :total-pages="serviceRewardsTotalPages"
+        :total-items="serviceRewardsTotalCount"
+        :items-per-page="serviceRewardsItemsPerPage"
+        item-label="rewards"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setServiceRewardsPage"
+        @update:items-per-page="setServiceRewardsItemsPerPage"
+      />
 
     </div>
 
@@ -1729,59 +1696,16 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-         <div class="flex items-center justify-end gap-2">
-            <span class="text-xs text-secondary"> Limit:</span>
-            <select v-model="itemsPerPages" @change="loadTopServicesByPerformance()"  class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-              <option :value="30">30</option>
-              <option :value="50">50</option>
-            </select>
-          </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((rewardCurrentPage - 1) * rewardItemsPerPage) + 1 }} to {{ Math.min(rewardCurrentPage * rewardItemsPerPage, rewardTotalItems) }} of {{ rewardTotalPages }} rewards
-          </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage = 1"
-              :disabled="rewardCurrentPage === 1 || rewardTotalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage--"
-              :disabled="rewardCurrentPage === 1 || rewardTotalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ rewardCurrentPage }} of {{ rewardTotalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage++"
-              :disabled="rewardCurrentPage === rewardTotalPages || rewardTotalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage = rewardTotalPages"
-              :disabled="rewardCurrentPage === rewardTotalPages || rewardTotalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>  
-      </div> 
+      <TablePagination
+        :current-page="rewardCurrentPage"
+        :total-pages="rewardTotalPages"
+        :total-items="rewardTotalItems"
+        :items-per-page="rewardItemsPerPage"
+        item-label="rewards"
+        :page-size-options="[10, 20, 30, 50]"
+        @update:current-page="setRewardPage"
+        @update:items-per-page="setRewardItemsPerPage"
+      />
     </div>
     
 
@@ -1792,14 +1716,6 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
       <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" class="bg-[#ffffff] hover:bg-base-200 pt-2 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
         <div class="flex items-center justify-between mb-2 ml-3 mr-3">
           <div class="text-sm font-semibold text-main">Claims</div>
-          <div class="flex items-center gap-1">
-            <span class="text-xs text-secondary">Show:</span>
-            <select v-model="itemsPerPage" @change="loadClaims()" class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </select>
-          </div>
         </div>
         <div class="bg-base-200 rounded-md overflow-auto h-[35vh]">
           <table class="table w-full table-compact">
@@ -1848,44 +1764,16 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             </tbody>
           </table>
         </div>
-        <div class="flex justify-between items-center gap-4 my-6 px-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, claims.length) }} of {{ claims.length }} claims
-          </span>
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="prevPage"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              &lt;
-            </button>
-            <span class="text-xs px-2">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage"
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast"
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :total-items="claimsTotalCount"
+          :items-per-page="itemsPerPage"
+          item-label="claims"
+          :page-size-options="[25, 50, 100]"
+          @update:current-page="setClaimsPage"
+          @update:items-per-page="setClaimsItemsPerPage"
+        />
       </div>
 
       <!-- Right Column: Services Chart -->
@@ -2411,13 +2299,4 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
   .table { font-size: 0.75rem; }
   th, td { padding: 0.5rem; }
 }
-.page-btn:hover {
-  background-color: #e9ecef;
-}
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 </style>
-
-
