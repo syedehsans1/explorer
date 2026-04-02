@@ -11,6 +11,7 @@ import { PageRequest } from '@/types'
 import { decodeTxRaw } from '@cosmjs/proto-signing'
 import { fromBase64 } from '@cosmjs/encoding'
 import { hashTx } from '@/libs'
+import TablePagination from '@/components/TablePagination.vue'
 
 const props = defineProps(['chain'])
 const router = useRouter()
@@ -464,12 +465,13 @@ function search() {
   }
 }
 
-// 🔹 Pagination
-function nextPage() { if (currentPage.value < totalPages.value) currentPage.value++ }
-function prevPage() { if (currentPage.value > 1) currentPage.value-- }
-function goToFirst() { currentPage.value = 1 }
-function goToLast() { currentPage.value = totalPages.value }
-function changePageSize(newSize: number) { itemsPerPage.value = newSize }
+function setCurrentPage(page: number) {
+  currentPage.value = page
+}
+
+function setItemsPerPage(size: number) {
+  itemsPerPage.value = size
+}
 
 // 🔹 Human-readable tx type labels
 const TX_TYPE_LABELS: Record<string, string> = {
@@ -754,32 +756,16 @@ onMounted(async () => {
         </table>
       </div>
 
-      <!-- Pagination Bar -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">Show:</span>
-          <select v-model="itemsPerPage" @change="changePageSize(itemsPerPage)" class="select select-bordered select-sm w-20">
-            <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
-          </select>
-          <span class="text-sm text-gray-600">per page</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalTransactions) }} of {{ totalTransactions }} transactions
-          </span>
-          <div class="flex items-center gap-1">
-            <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst" :disabled="currentPage === 1 || totalPages === 0">First</button>
-            <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="prevPage" :disabled="currentPage === 1 || totalPages === 0">&lt;</button>
-            <span class="text-xs px-2">Page {{ currentPage }} of {{ totalPages }}</span>
-            <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage" :disabled="currentPage === totalPages || totalPages === 0">&gt;</button>
-            <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast" :disabled="currentPage === totalPages || totalPages === 0">Last</button>
-          </div>
-        </div>
-      </div>
+      <TablePagination
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :total-items="totalTransactions"
+        :items-per-page="itemsPerPage"
+        item-label="transactions"
+        :page-size-options="pageSizeOptions"
+        @update:current-page="setCurrentPage"
+        @update:items-per-page="setItemsPerPage"
+      />
     </div>
 
     <!-- 🔍 Search Section -->
@@ -798,9 +784,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page-btn:hover { background-color: #e9ecef; }
-.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
 /* ✅ Transaction slide animation */
 .tx-slide-enter-active { transition: all 0.4s ease; }
 .tx-slide-enter-from { opacity: 0; transform: translateY(-12px); }

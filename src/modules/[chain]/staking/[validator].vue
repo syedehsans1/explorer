@@ -17,6 +17,7 @@ import {
 } from '@/libs';
 import { PageRequest, type Coin, type Delegation, type PaginatedDelegations, type PaginatedTxs, type Validator } from '@/types';
 import PaginationBar from '@/components/PaginationBar.vue';
+import TablePagination from '@/components/TablePagination.vue';
 import { fromBase64, toBase64 } from '@cosmjs/encoding';
 import { stringToUint8Array, uint8ArrayToString } from '@/libs/utils';
 import { fetchTransactions, type ApiTransaction, type TransactionFilters } from '@/libs/transactions';
@@ -271,6 +272,22 @@ async function loadDelegationTransactions() {
 
 watch([delegationPage, delegationLimit], loadDelegationTransactions)
 
+function setCurrentTxPage(page: number) {
+  currentTxPage.value = page;
+}
+
+function setTxItemsPerPage(size: number) {
+  txItemsPerPage.value = size;
+}
+
+function setDelegationPage(page: number) {
+  delegationPage.value = page;
+}
+
+function setDelegationItemsPerPage(size: number) {
+  delegationLimit.value = size;
+}
+
 onMounted(loadDelegationTransactions)
 
 onMounted(() => {
@@ -496,6 +513,11 @@ function getTransactionFee(tx: any): string {
 
   return '-';
 }
+
+function truncate(text: string, max: number): string {
+  if (!text) return '-';
+  return text.length > max ? text.slice(0, max) + '...' : text;
+}
 </script>
 <template>
   <div class="pt-[6.5rem]">
@@ -512,7 +534,7 @@ function getTransactionFee(tx: any): string {
           " />
         <Icon v-else class="text-4xl" :icon="`mdi-help-circle-outline`" />
         <div>
-          <h2 class="text-2xl font-bold text-[#000000] dark:text-[#FFFFFF]">{{ v.description?.moniker }}</h2>
+          <h2 class="text-xl xl:text-2xl font-bold text-[#000000] dark:text-[#FFFFFF]">{{ v.description?.moniker }}</h2>
           <!-- Validator Details -->
         <p class="text-[16px] dark:text-gray-200 text-[#000000]">{{ v.description?.details }}</p>
         </div>
@@ -529,7 +551,7 @@ function getTransactionFee(tx: any): string {
           </div>
           <div class="flex-1">
             <div class="text-xs font-semibold dark:text-main text-[#64748B] mb-1">{{ $t('staking.total_bonded') }}</div>
-            <div class="text-xl font-bold dark:text-main text-[#171C1F]">{{ format.formatToken({
+            <div class="text-base lg:text-sm xl:text-xl font-bold dark:text-main text-[#171C1F]">{{ format.formatToken({
               amount: v.tokens, denom:
                 selfBonded.balance?.denom,
             }) }}</div>
@@ -545,7 +567,7 @@ function getTransactionFee(tx: any): string {
           </div>
           <div class="flex-1">
             <div class="text-xs font-semibold dark:text-main text-[#64748B] mb-1">{{ $t('staking.self_bonded') }}</div>
-            <div class="text-xl font-bold dark:text-main text-[#171C1F]">{{ format.formatToken(selfBonded.balance) }}<span
+            <div class="text-base lg:text-sm xl:text-xl font-bold dark:text-main text-[#171C1F]">{{ format.formatToken(selfBonded.balance) }}<span
                 class="text-xs font-normal text-gray-500 ml-1">({{ selfRate }})</span></div>
           </div>
         </div>
@@ -559,7 +581,7 @@ function getTransactionFee(tx: any): string {
           </div>
           <div class="flex-1">
             <div class="text-xs font-semibold dark:text-main text-[#64748B] mb-1">{{ $t('staking.annual_profit') }}</div>
-            <div class="text-xl font-bold dark:text-success text-[#171C1F]">{{ apr }}</div>
+            <div class="text-base lg:text-sm xl:text-xl font-bold dark:text-success text-[#171C1F]">{{ apr }}</div>
           </div>
         </div>
       </div>
@@ -577,21 +599,21 @@ function getTransactionFee(tx: any): string {
                 <Icon icon="mdi-web" class="text-xs text-[#64748B] flex-shrink-0" />
                 <a :href="v?.description?.website || '#'" 
                    :class="v?.description?.website
-                     ? 'cursor-pointer text-xs text-primary hover:underline truncate'
-                     : 'cursor-default text-xs text-gray-400'"
+                     ? 'cursor-pointer text-sm text-primary hover:underline truncate'
+                     : 'cursor-default text-sm text-gray-400'"
                    :target="v?.description?.website ? '_blank' : undefined"
                    :rel="v?.description?.website ? 'noopener noreferrer' : undefined">
-                  {{ v.description?.website || '-' }}
+                  {{ truncate(v.description?.website || '', 12) }}
                 </a>
               </div>
               <div class="flex items-center gap-1.5">
                 <Icon icon="mdi-email-outline" class="text-xs text-[#64748B] flex-shrink-0" />
                 <a v-if="v.description?.security_contact" 
                    :href="'mailto:' + v.description.security_contact" 
-                   class="cursor-pointer text-xs text-primary hover:underline truncate">
-                  {{ v.description?.security_contact }}
+                   class="cursor-pointer text-sm text-primary hover:underline truncate">
+                  {{ truncate(v.description.security_contact, 13) }}
                 </a>
-                <span v-else class="text-xs text-gray-400">-</span>
+                <span v-else class="text-sm text-gray-400">-</span>
               </div>
             </div>
           </div>
@@ -604,7 +626,7 @@ function getTransactionFee(tx: any): string {
       <!-- About and Status Information -->
       <div class="bg-[#ffffff] dark:bg-[rgba(255,255,255,.03)] rounded-xl p-4">
         <!-- Validator Status -->
-        <div class="text-2xl font-semibold text-main mb-2 mt-4">{{ $t('staking.validator_status') }}</div>
+        <div class="text-xl xl:text-2xl font-semibold text-main mb-2 mt-4">{{ $t('staking.validator_status') }}</div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="flex flex-col items-center justify-center gap-4 bg-[#ffffff] hover:bg-base-200 p-3 pb-8 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
             <div class="text-sm dark:text-gray-500 text-[#64748B]">{{ $t('staking.status') }}</div>
@@ -624,28 +646,28 @@ function getTransactionFee(tx: any): string {
 
           <div class="flex flex-col items-center justify-center gap-4 bg-[#ffffff] hover:bg-base-200 p-3 pb-8 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
             <div class="text-sm text-[#64748B]">{{ $t('staking.jailed') }}</div>
-            <div class="text-xl font-bold">
+            <div class="text-base xl:text-xl font-bold">
               {{ v.jailed || '-' }}
             </div>
           </div>
 
           <div class="flex flex-col items-center justify-center gap-4 bg-[#ffffff] hover:bg-base-200 p-3 pb-8 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
             <div class="text-sm text-[#64748B]">{{ $t('staking.min_self') }}</div>
-            <div class="text-xl font-bold">
+            <div class="text-base xl:text-xl font-bold">
               {{ v.min_self_delegation }} {{ staking.params.bond_denom }}
             </div>
           </div>
 
           <div class="flex flex-col items-center justify-center gap-4 bg-[#ffffff] hover:bg-base-200 p-3 pb-8 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
             <div class="text-sm text-[#64748B]">{{ $t('staking.unbonding_height') }}</div>
-            <div class="text-xl font-bold">
+            <div class="text-base xl:text-xl font-bold">
               {{ v.unbonding_height || '-' }}
             </div>
           </div>
 
           <div class="flex flex-col items-center justify-center gap-4 bg-[#ffffff] hover:bg-base-200 p-3 pb-8 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
             <div class="text-sm text-[#64748B]">{{ $t('staking.unbonding_time') }}</div>
-            <div class="text-xl font-bold">
+            <div class="text-base xl:text-xl font-bold">
               <template v-if="v.unbonding_time && !v.unbonding_time.startsWith('1970')">
                 {{ format.toDay(v.unbonding_time, 'from') }}
               </template>
@@ -674,7 +696,7 @@ function getTransactionFee(tx: any): string {
 
         <!-- Commissions & Rewards -->
         <div class="rounded-xl">
-          <div class="text-2xl font-semibold text-main mb-4 mt-4">
+          <div class="text-xl xl:text-2xl font-semibold text-main mb-4 mt-4">
             {{ $t('staking.commissions_&_rewards') }}
           </div>
 
@@ -683,7 +705,7 @@ function getTransactionFee(tx: any): string {
               <div class="text-sm text-[#64748B] mb-2">{{ $t('staking.commissions') }}</div>
               <div class="flex flex-wrap">
                 <div v-for="(i, k) in commission" :key="`commission-${k}`"
-                  class="mr-2 mb-2 text-2xl dark:text-[#ffffff] text-[#153cd8]">
+                  class="mr-2 mb-2 text-base xl:text-2xl dark:text-[#ffffff] text-[#153cd8]">
                   {{ format.formatToken2(i) }}
                 </div>
               </div>
@@ -693,7 +715,7 @@ function getTransactionFee(tx: any): string {
               <div class="text-sm text-[#64748B] mb-2">{{ $t('staking.outstanding') }} {{ $t('account.rewards') }}</div>
               <div class="flex flex-wrap">
                 <div v-for="(i, k) in rewards" :key="`reward-${k}`"
-                  class="mr-2 mb-2 text-2xl dark:text-[#ffffff] text-[#153cd8]">
+                  class="mr-2 mb-2 text-base xl:text-2xl dark:text-[#ffffff] text-[#153cd8]">
                   {{ format.formatToken2(i) }}
                 </div>
               </div>
@@ -704,7 +726,7 @@ function getTransactionFee(tx: any): string {
 
       <!-- Addresses Section -->
       <div class="bg-[#ffffff] dark:bg-[rgba(255,255,255,.03)] rounded-xl p-4 pt-6">
-        <div class="text-2xl font-semibold text-main mb-4">{{ $t('staking.addresses') }}</div>
+        <div class="text-xl xl:text-2xl font-semibold text-main mb-4">{{ $t('staking.addresses') }}</div>
 
         <div class="grid grid-cols-1 gap-4">
           <div class="bg-[#ffffff] hover:bg-base-200 p-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
@@ -979,64 +1001,16 @@ function getTransactionFee(tx: any): string {
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">Show:</span>
-          <select 
-            v-model="txItemsPerPage" 
-            class="select select-bordered select-sm w-20"
-          >
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-          <span class="text-sm text-gray-600">per page</span>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentTxPage - 1) * txItemsPerPage) + 1 }} to {{ Math.min(currentTxPage * txItemsPerPage, totalTxCount) }} of {{ totalTxCount }} transactions
-          </span>
-          
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-              @click="currentTxPage = 1"
-              :disabled="currentTxPage === 1 || totalTxPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-              @click="currentTxPage--"
-              :disabled="currentTxPage === 1 || totalTxPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ currentTxPage }} of {{ totalTxPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-              @click="currentTxPage++"
-              :disabled="currentTxPage === totalTxPages || totalTxPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-              @click="currentTxPage = totalTxPages"
-              :disabled="currentTxPage === totalTxPages || totalTxPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>
-      </div>
+      <TablePagination
+        :current-page="currentTxPage"
+        :total-pages="totalTxPages"
+        :total-items="totalTxCount"
+        :items-per-page="txItemsPerPage"
+        item-label="transactions"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setCurrentTxPage"
+        @update:items-per-page="setTxItemsPerPage"
+      />
     </div>
 
     <!-- Voting Power Events Table -->
@@ -1092,57 +1066,16 @@ function getTransactionFee(tx: any): string {
           </tbody>
         </table>
       </div>
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">Show:</span>
-          <select v-model="delegationLimit" class="select select-bordered select-sm w-20">
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-          <span class="text-sm text-gray-600">per page</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((delegationPage - 1) * delegationLimit) + 1 }} to {{ Math.min(delegationPage * delegationLimit, delegationTotal) }} of {{ delegationTotal }} delegations
-          </span>
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-              @click="delegationPage = 1"
-              :disabled="delegationPage === 1"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="delegationPage--"
-              :disabled="delegationPage === 1"
-            >
-              &lt;
-            </button>
-            <span class="text-xs px-2">
-              Page {{ delegationPage }} of {{ delegationTotalPages }}
-            </span>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="delegationPage++"
-              :disabled="delegationPage === delegationTotalPages"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="delegationPage = delegationTotalPages"
-              :disabled="delegationPage === delegationTotalPages"
-            >
-              Last
-            </button>
-          </div>
-        </div>
-      </div>
+      <TablePagination
+        :current-page="delegationPage"
+        :total-pages="delegationTotalPages"
+        :total-items="delegationTotal"
+        :items-per-page="delegationLimit"
+        item-label="delegations"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setDelegationPage"
+        @update:items-per-page="setDelegationItemsPerPage"
+      />
     </div>
 
 

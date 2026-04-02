@@ -233,7 +233,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] text-2xl flex flex-col w-full px-4 py-4 my-4 font-bold text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
       <div class="flex items-center mb-4">
         <!-- <Icon icon="mdi:cube-outline" class="text-2xl text-info mr-2" /> -->
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ chain.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ chain.title }}</div>
       </div>
       <div
         class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4"
@@ -247,7 +247,7 @@ function formatTitle(v: string) {
             <Icon :icon="`mdi:${item.icon || 'information-outline'}`" class="mr-1 text-info" />
             {{ formatTitle(item.subtitle) }}
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item.value }}</div>
         </div>
       </div>
     </div>
@@ -256,7 +256,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] w-full px-4 pt-3 pb-4 mt-6 font-bold text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
       <div class="flex items-center mb-4">
         <!-- Title -->
-        <div class="text-[30px]/[40px] font-semibold text-main">
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">
           Validator Version Distribution
         </div>
       </div>
@@ -361,7 +361,7 @@ function formatTitle(v: string) {
       v-if="store.staking?.items && store.staking?.items?.length > 0">
       <div class="flex items-center mb-4">
         <!-- <Icon icon="mdi:bank" class="text-2xl text-secondary mr-2" /> -->
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.staking?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.staking?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -383,7 +383,7 @@ function formatTitle(v: string) {
       v-if="store.gov?.items && store.gov?.items?.length > 0">
       <div class="flex items-center mb-4">
         <!-- <Icon icon="mdi:gavel" class="text-2xl text-accent mr-2" /> -->
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.gov?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.gov?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-6 2xl:!grid-cols-7 gap-4">
         <div
@@ -395,7 +395,7 @@ function formatTitle(v: string) {
             <!-- <Icon icon="mdi:vote" class="mr-1 text-accent" /> -->
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-xs text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">
+          <div class="text-xs text-main font-medium break-all flex items-center justify-center text-center">
             {{ item?.subtitle == 'min_deposit' ? format.formatToken(item.value[0]) : item?.value }}
           </div>
         </div>
@@ -407,7 +407,7 @@ function formatTitle(v: string) {
       v-if="store.distribution?.items && store.distribution?.items?.length > 0">
       <div class="flex items-center mb-4">
         <!-- <Icon icon="mdi:share-variant" class="text-2xl text-warning mr-2" /> -->
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.distribution?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.distribution?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -419,7 +419,7 @@ function formatTitle(v: string) {
             <!-- <Icon icon="mdi:percent" class="mr-1 text-warning" /> -->
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
@@ -428,7 +428,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.bank?.items && store.bank?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.bank?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.bank?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -439,7 +439,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
@@ -448,7 +448,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.auth?.items && store.auth?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.auth?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.auth?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -459,7 +459,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
@@ -468,7 +468,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.applicationParams?.items && store.applicationParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.applicationParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.applicationParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -479,7 +479,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.subtitle == 'min_stake' ? format.formatToken(item.value) : item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.subtitle == 'min_stake' ? format.formatToken(item.value) : item?.value }}</div>
         </div>
       </div>
     </div>
@@ -488,7 +488,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.gatewayParams?.items && store.gatewayParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.gatewayParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.gatewayParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -499,7 +499,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.subtitle == 'min_stake' ? format.formatToken(item.value) : item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.subtitle == 'min_stake' ? format.formatToken(item.value) : item?.value }}</div>
         </div>
       </div>
     </div>
@@ -508,7 +508,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.migrationParams?.items && store.migrationParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.migrationParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.migrationParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -519,7 +519,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.subtitle == 'min_stake' ? format.formatToken(item.value) : item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.subtitle == 'min_stake' ? format.formatToken(item.value) : item?.value }}</div>
         </div>
       </div>
     </div>
@@ -528,7 +528,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.proofParams?.items && store.proofParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.proofParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.proofParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -539,7 +539,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ ['proof_missing_penalty','proof_requirement_threshold','proof_submission_fee'].includes(item?.subtitle) ? format.formatToken(item.value) : item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ ['proof_missing_penalty','proof_requirement_threshold','proof_submission_fee'].includes(item?.subtitle) ? format.formatToken(item.value) : item?.value }}</div>
         </div>
       </div>
     </div>
@@ -548,7 +548,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.serviceParams?.items && store.serviceParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.serviceParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.serviceParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -559,7 +559,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.subtitle == 'add_service_fee' ? format.formatToken(item.value) : item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.subtitle == 'add_service_fee' ? format.formatToken(item.value) : item?.value }}</div>
         </div>
       </div>
     </div>
@@ -568,7 +568,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.sessionParams?.items && store.sessionParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.sessionParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.sessionParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -579,7 +579,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
@@ -588,7 +588,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.sharedParams?.items && store.sharedParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.sharedParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.sharedParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -599,7 +599,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
@@ -608,7 +608,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.supplierParams?.items && store.supplierParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.supplierParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.supplierParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -619,7 +619,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ ['min_stake','staking_fee'].includes(item?.subtitle) ? format.formatToken(item.value) : item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ ['min_stake','staking_fee'].includes(item?.subtitle) ? format.formatToken(item.value) : item?.value }}</div>
         </div>
       </div>
     </div>
@@ -628,7 +628,7 @@ function formatTitle(v: string) {
     <div class="bg-[#ffffff] px-4 pt-3 pb-4 mt-6 text-white rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
       v-if="store.tokenomicsParams?.items && store.tokenomicsParams?.items?.length > 0">
       <div class="flex items-center mb-4">
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.tokenomicsParams?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.tokenomicsParams?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -639,7 +639,7 @@ function formatTitle(v: string) {
           <div class="text-xs mb-2 text-[#64748B;] flex items-center justify-center">
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
@@ -649,7 +649,7 @@ function formatTitle(v: string) {
       v-if="store.slashing?.items && store.slashing?.items?.length > 0">
       <div class="flex items-center mb-4">
         <!-- <Icon icon="mdi:alert" class="text-2xl text-error mr-2" /> -->
-        <div class="text-[30px]/[40px] font-semibold text-main">{{ store.slashing?.title }}</div>
+        <div class="text-xl lg:text-[30px]/[40px] font-semibold text-main">{{ store.slashing?.title }}</div>
       </div>
       <div class="grid grid-cols-2 md:!grid-cols-4 lg:!grid-cols-5 2xl:!grid-cols-6 gap-4">
         <div
@@ -661,7 +661,7 @@ function formatTitle(v: string) {
             <!-- <Icon icon="mdi:sword" class="mr-1 text-error" /> -->
             <span class="capitalize">{{ formatTitle(item?.subtitle) }}</span>
           </div>
-          <div class="text-base text-main font-medium overflow-hidden text-ellipsis flex items-center justify-center">{{ item?.value }}</div>
+          <div class="text-xs lg:text-base text-main font-medium break-all flex items-center justify-center text-center">{{ item?.value }}</div>
         </div>
       </div>
     </div>
