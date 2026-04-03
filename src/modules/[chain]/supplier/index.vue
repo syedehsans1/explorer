@@ -31,18 +31,28 @@ const totalPages = computed(() => {
 const totalSuppliers = computed(() => parseInt(pageResponse.value.total || '0'));
 
 // Filter and sort state
-const statusFilter = ref('all');
+const statusFilter = ref<string>('all');
+const servicesFilter = ref<string>('all');
 const sortBy = ref<'stake' | 'services'>('stake');
 const sortOrder = ref<'desc' | 'asc'>('desc');
 
 // 🔹 Client-side filtering and sorting
 const sortedList = computed(() => {
   let filtered = list.value.filter((item: any) => {
-    if (statusFilter.value === 'all') return true;
-    const status = getSupplierStatus(item);
-    if (statusFilter.value === 'staked') return status.label === 'Staked';
-    if (statusFilter.value === 'unstaked') return status.label === 'Unstaked';
-    if (statusFilter.value === 'unstaking') return status.label === 'Unstaking';
+    const status = getSupplierStatus(item).label;
+    if (statusFilter.value !== 'all') {
+      if (statusFilter.value === 'staked' && status !== 'Staked') return false;
+      if (statusFilter.value === 'unstaked' && status !== 'Unstaked') return false;
+      if (statusFilter.value === 'unstaking' && status !== 'Unstaking') return false;
+    }
+
+    const serviceCount = item.services?.length || 0;
+    if (servicesFilter.value !== 'all') {
+      if (servicesFilter.value === 'high' && serviceCount < 5) return false;
+      if (servicesFilter.value === 'medium' && (serviceCount < 2 || serviceCount > 4)) return false;
+      if (servicesFilter.value === 'none' && serviceCount !== 0) return false;
+    }
+
     return true;
   });
 
@@ -253,23 +263,36 @@ onMounted(() => {
 });
 
 
-// add this helper for supplier status (Staked / Unstaked) with classes
+// add this helper for supplier status (Staked / Unstaked / Unstaking) with classes
 function getSupplierStatus(item: any) {
   if (!item) return { label: '-', classes: '' }
   const raw = (item.status || item.state || '').toString()
   const s = raw.toLowerCase()
-  // explicit indicators for unbonding/unstaking
-  if (s.includes('unbond') || s.includes('unstak') || item.unbonding_time || item.unbonding_height) {
+
+  if (s.includes('unstake_requested') || s.includes('unstaking') || s.includes('unbonding')) {
+    return { label: 'Unstaking', classes: 'bg-[#F59E0B]/10 text-[#F59E0B]' }
+  }
+
+  if (s.includes('unstaked') || s.includes('unbonded') || s.includes('inactive') || s.includes('tombstoned')) {
     return { label: 'Unstaked', classes: 'bg-[#E03834]/10 text-[#E03834]' }
   }
-  // treat as staked if status mentions bond/stake or stake amount > 0
-  const stakeAmt = Number(item.stake?.amount || '0')
-  if (s.includes('bond') || s.includes('stake') || stakeAmt > 0) {
+
+  if (s.includes('staked') || s.includes('bond') || s.includes('stake') || s.includes('active')) {
     return { label: 'Staked', classes: 'bg-[#60BC29]/10 text-[#60BC29]' }
   }
+
+  const stakeAmt = Number(item.stake?.amount || '0')
+  if (stakeAmt > 0) {
+    return { label: 'Staked', classes: 'bg-[#60BC29]/10 text-[#60BC29]' }
+  }
+
+  // Unstaked by fallback when stake is zero
+  if (stakeAmt === 0) {
+    return { label: 'Unstaked', classes: 'bg-[#E03834]/10 text-[#E03834]' }
+  }
+
   return { label: '-', classes: '' }
 }
-// ...existing code...
 
 // 🔹 Computed status
 const value = ref('stake');
@@ -310,7 +333,7 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
     <!-- Filter Bar -->
     <div class="bg-[#ffffff] p-4 mb-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
       <div class="flex items-center gap-2 flex-wrap">
-        <!-- Status Filter -->
+            <!-- Status Filter -->
         <div class="flex items-center gap-1.5">
           <Icon icon="mdi:check-circle-outline" class="text-base-content/60 text-sm" />
           <select
@@ -321,6 +344,20 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
             <option value="staked">Staked</option>
             <option value="unstaked">Unstaked</option>
             <option value="unstaking">Unstaking</option>
+          </select>
+        </div>
+
+        <!-- Services Filter -->
+        <div class="flex items-center gap-1.5">
+          <Icon icon="mdi:layers-outline" class="text-base-content/60 text-sm" />
+          <select
+            v-model="servicesFilter"
+            class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-32 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <option value="all">All</option>
+            <option value="high">High (5+)</option>
+            <option value="medium">Medium (2-4)</option>
+            <option value="none">None (0)</option>
           </select>
         </div>
 

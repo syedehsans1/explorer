@@ -1454,70 +1454,70 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
 
     <!-- Top Row: Enhanced KPI Boxes -->
     <div v-if="summaryStats && (props.filters?.supplier_address || props.filters?.owner_address)" class="mb-3">
-      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+      <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:file-document-multiple" class="text-sm" />
             Claims
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.total_claims)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.total_claims)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-secondary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-secondary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:account-group" class="text-sm" />
             Suppliers
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.unique_suppliers)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_suppliers)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:application" class="text-sm" />
             Applications
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.unique_applications)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_applications)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:server-network" class="text-sm" />
             Services
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.unique_services)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_services)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:network" class="text-sm" />
             Total Relays
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(safeInt(summaryStats?.total_relays)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(safeInt(summaryStats?.total_relays)) }}</div>
         </div>
-        <div 
-          class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg"
+        <div
+          class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg"
           :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'border-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'border-warning' : 'border-error'">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:gauge" class="text-sm" />
             Avg Efficiency
           </div>
-          <div class="text-xl font-bold" :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'text-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'text-warning' : 'text-error'">
+          <div class="text-sm font-bold truncate" :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'text-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'text-warning' : 'text-error'">
             {{ safePercent(summaryStats?.avg_efficiency_percent) }}
           </div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:calculator" class="text-sm" />
             Compute Units
           </div>
-          <div class="text-xl font-bold">{{ formatComputeUnits(safeInt(summaryStats?.total_claimed_compute_units)) }}</div>
-          <div class="text-xs text-secondary mt-1">
+          <div class="text-sm font-bold truncate">{{ formatComputeUnits(safeInt(summaryStats?.total_claimed_compute_units)) }}</div>
+          <div class="text-xs text-secondary mt-1 truncate">
             Est: {{ formatComputeUnits(safeInt(summaryStats?.total_estimated_compute_units)) }}
           </div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:currency-usd" class="text-sm" />
             Total Rewards
           </div>
-          <div class="text-xl font-bold text-success">{{ formatCompactAmount(summaryStats.total_rewards_upokt) }} POKT</div>
-          <div class="text-xs text-secondary mt-1">
+          <div class="text-sm font-bold text-success truncate">{{ formatCompactAmount(summaryStats.total_rewards_upokt) }} POKT</div>
+          <div class="text-xs text-secondary mt-1 truncate">
             Avg/Relay: {{ format.formatToken({ denom: 'upokt', amount: String(summaryStats.avg_reward_per_relay || '0') }) }}
           </div>
         </div>

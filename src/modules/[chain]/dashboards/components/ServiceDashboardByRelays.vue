@@ -621,7 +621,7 @@ onMounted(() => {
       <span class="ml-2">Loading service rewards analytics...</span>
     </div>
     
-    <div v-if="!serviceRewardsLoading && serviceRewards.length === 0" class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 rounded-xl p-8 text-center mb-5">
+    <div v-if="!serviceRewardsLoading && serviceRewards.length === 0" class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 rounded-xl p-8 text-center mb-5">
       <Icon icon="mdi:chart-line" class="text-4xl text-secondary mb-2" />
       <p class="text-secondary">No service rewards data available</p>
       <p class="text-xs text-secondary mt-2">Data is aggregated by service</p>
@@ -629,38 +629,38 @@ onMounted(() => {
     
     <!-- Top Row: 8 KPI Boxes (Compact) -->
     <div v-if="summaryStats" class="mb-3">
-      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+      <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Submissions</div>
-          <div class="text-lg font-bold">{{ formatNumber(parseInt(summaryStats.total_submissions)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.total_submissions)) }}</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Suppliers</div>
-          <div class="text-lg font-bold">{{ formatNumber(parseInt(summaryStats.unique_suppliers)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_suppliers)) }}</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Applications</div>
-          <div class="text-lg font-bold">{{ formatNumber(parseInt(summaryStats.unique_applications)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_applications)) }}</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Services</div>
-          <div class="text-lg font-bold">{{ formatNumber(parseInt(summaryStats.unique_services)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_services)) }}</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Total Relays</div>
-          <div class="text-lg font-bold">{{ formatNumber(parseInt(summaryStats.total_relays)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.total_relays)) }}</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Avg Efficiency</div>
-          <div class="text-lg font-bold">{{ parseFloat(summaryStats.avg_efficiency_percent).toFixed(2) }}%</div>
+          <div class="text-sm font-bold truncate">{{ parseFloat(summaryStats.avg_efficiency_percent).toFixed(2) }}%</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Compute Units</div>
-          <div class="text-lg font-bold">{{ formatNumber(parseInt(summaryStats.total_claimed_compute_units)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.total_claimed_compute_units)) }}</div>
         </div>
-        <div class="flex flex-col bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col min-w-0 bg-[#ffffff] p-2 rounded-xl hover:bg-base-200 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="text-xs text-secondary mb-1">Total Rewards</div>
-          <div class="text-lg font-bold">{{ format.formatToken({ denom: 'upokt', amount: String(summaryStats.total_rewards_upokt) }) }}</div>
+          <div class="text-sm font-bold truncate">{{ format.formatToken({ denom: 'upokt', amount: String(summaryStats.total_rewards_upokt) }) }}</div>
         </div>
       </div>
     </div>
@@ -668,12 +668,12 @@ onMounted(() => {
     <!-- Comprehensive Dashboard Below Stats -->
     <div v-if="!serviceRewardsLoading && serviceRewards.length > 0" class="space-y-4 mb-4">
       <!-- Dashboard Controls -->
-      <div class="flex items-center justify-between mb-4">
+      <div class="main-dashboard">
         <h2 class="text-xl font-bold text-main">Service Performance Dashboard</h2>
-        <div class="flex items-center gap-4">
+        <div class="main-child">
           <div class="flex items-center gap-2">
             <span class="text-xs text-secondary">Metric:</span>
-            <select v-model="selectedMetric" class="select select-bordered select-sm text-xs hover:bg-base-200 dark:bg-[rgba(255,255,255,.03);] dark:hover:bg-[rgba(255,255,255,0.06)]">
+            <select v-model="selectedMetric" class="select select-bordered select-sm text-xs w-full md:w-auto hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
               <option value="rewards">Rewards</option>
               <option value="relays">Relays</option>
               <option value="efficiency">Efficiency</option>
@@ -682,7 +682,7 @@ onMounted(() => {
           </div>
           <div class="flex items-center gap-2">
             <span class="text-xs text-secondary">Days:</span>
-            <select v-model="serviceRewardsDays" class="select select-bordered select-sm text-xs hover:bg-base-200 dark:bg-[rgba(255,255,255,.03);] dark:hover:bg-[rgba(255,255,255,0.06)]">
+            <select v-model="serviceRewardsDays" class="select select-bordered select-sm text-xs w-full md:w-auto hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
               <option :value="7">7</option>
               <option :value="15">15</option>
               <option :value="30">30</option>
@@ -692,7 +692,7 @@ onMounted(() => {
           </div>
           <div class="flex items-center gap-2">
             <span class="text-xs text-secondary">Limit:</span>
-            <select v-model="serviceRewardsLimit" class="select select-bordered select-sm text-xs hover:bg-base-200 dark:bg-[rgba(255,255,255,.03);] dark:hover:bg-[rgba(255,255,255,0.06)]">
+            <select v-model="serviceRewardsLimit" class="select select-bordered select-sm text-xs w-full md:w-auto hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
               <option :value="5">5</option>
               <option :value="10">10</option>
               <option :value="25">25</option>
@@ -823,7 +823,7 @@ onMounted(() => {
           <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
               <span class="text-xs text-secondary">Sort:</span>
-              <select v-model="serviceRewardsSortBy" class="select select-bordered select-sm text-xs dark:bg-[rgba(255,255,255,.03);] dark:hover:bg-[rgba(255,255,255,0.06)] bg-base-200 hover:bg-base-300">
+              <select v-model="serviceRewardsSortBy" class="select select-bordered select-sm text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] bg-base-200 hover:bg-base-300">
                 <option value="rewards">Rewards</option>
                 <option value="relays">Relays</option>
                 <option value="efficiency">Efficiency</option>
@@ -838,7 +838,7 @@ onMounted(() => {
         </div>
         <div class="bg-base-200 rounded-md overflow-auto" style="max-height: 600px;">
           <table class="table w-full table-compact">
-            <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
+            <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
               <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Rank</th>
                 <th>Service</th>
@@ -916,8 +916,38 @@ onMounted(() => {
 </template>
 
 <style scoped>
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .table { font-size: 0.75rem; }
   th, td { padding: 0.5rem; }
+}
+
+.main-dashboard {
+  display: flex; 
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.main-child {
+  display: flex;  
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* md (≥768px) */
+@media (min-width: 768px) {
+  .main-dashboard {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .main-child {
+    flex-direction: row;
+    align-items: center;
+  }
 }
 </style>

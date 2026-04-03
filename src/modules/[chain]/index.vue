@@ -202,7 +202,7 @@ const blocksPage = ref(1);
 const blocksLimit = ref(25);
 const blocksTotal = ref(0);
 const blocksTotalPages = ref(0);
-const avgBlockProductionTime = ref<string | null>(null);
+const avgBlockProductionTime = ref<number | null>(null);
 
 //  Track last known height to detect new blocks
 const lastKnownHeightDashboard = ref<number>(0)
@@ -617,7 +617,7 @@ async function loadBlocks() {
       blocksTotalPages.value = result.meta?.totalPages || 0;
       avgBlockProductionTime.value =
         result.meta?.avgBlockProductionTime != null
-          ? Number(result.meta.avgBlockProductionTime).toFixed(2)
+          ? Number(result.meta.avgBlockProductionTime)
           : null;
       isBlocksNodeFallback.value = false;
     } else {
@@ -1559,7 +1559,7 @@ function formatBlockTime(secondsStr?: string | number) {
                 <Icon icon="mdi:timer-outline" class="text-sm text-[#64748B] mr-1" />
                 <span class="text-xs text-secondary">Avg Block Time (24h)</span>
               </div>
-              <div class="text-xl text-main flex items-center justify-center font-medium"> {{ avgBlockProductionTime || 0  }}s
+              <div class="text-xl text-main flex items-center justify-center font-medium"> {{ avgBlockProductionTime !== null ? formatBlockTime(avgBlockProductionTime) : '-' }}
               </div>
             </div>
           </div>
@@ -1715,7 +1715,7 @@ function formatBlockTime(secondsStr?: string | number) {
                     <span class="text-[10px] max-[1024px]:text-[8px] max-[1024px]:font-bold text-secondary">Avg Block Time (24h)</span>
                   </div>
                   <div class="text-xl max-[1024px]:text-xs text-main flex items-center justify-center font-medium">
-                    {{ avgBlockProductionTime || 0 }}s
+                    {{ avgBlockProductionTime !== null ? formatBlockTime(avgBlockProductionTime) : '-' }}
                   </div>
                 </div>
               </div>
@@ -1842,7 +1842,7 @@ function formatBlockTime(secondsStr?: string | number) {
         <div class="text-lg font-semibold text-main">Network Statistics</div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-8 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:wallet" class="text-sm mr-1 text-secondary" />
@@ -1937,10 +1937,10 @@ function formatBlockTime(secondsStr?: string | number) {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
       <!-- Network Growth Chart -->
       <div class="bg-base-200 pt-3 rounded-lg hover:bg-base-300 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
-        <div class="flex items-center justify-between mb-4 px-5 gap-4">
-          <div class="flex flex-1 items-center gap-4 justify-between">
+        <div class="main-network-growth-chart items-center justify-between mb-4 px-5 gap-4">
+          <div class="main-network-growth-chart-child items-center w-full justify-between gap-4">
             <div class="flex text-lg font-semibold text-main">Network Growth</div>
-            <div class="flex tabs tabs-boxed bg-base-200 dark:bg-base-300">
+            <div class="flex items-center tabs tabs-boxed bg-base-200 dark:bg-base-300">
               <button @click="networkGrowthTab = 'performance'" :class="['tab', networkGrowthTab === 'performance' ? 'tab-active bg-[#09279F] text-white' : '']">Performance</button>
               <button @click="networkGrowthTab = 'core-services'" :class="['tab', networkGrowthTab === 'core-services' ? 'tab-active bg-[#09279F] text-white' : '']">Services</button>
             </div>
@@ -2211,6 +2211,26 @@ function formatBlockTime(secondsStr?: string | number) {
 
 .mobile-home {
   display: block;
+}
+
+.main-network-growth-chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-network-growth-chart-child {
+  display: flex;
+  flex-direction:  column;
+}
+
+@media (min-width: 768px) {
+  .main-network-growth-chart {
+    flex-direction: row;
+  }
+
+  .main-network-growth-chart-child {
+    flex-direction: row;
+  }
 }
 
 @media (min-width: 1024px) {
