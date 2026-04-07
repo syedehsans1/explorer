@@ -135,7 +135,7 @@ export default defineConfig({
         // target: 'http://192.168.1.17:3006',
         changeOrigin: true,
       },
-    },
+    },target: 'http://exp04-nyc.us.stakenodes.org:3006',
     fs: {
       // Deny access to .git directory
       deny: ['.git'],
