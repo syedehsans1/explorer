@@ -114,6 +114,16 @@ const typeTabMap: Record<string, string[]> = {
   ]
 }
 
+// 🔹 Amount helper — DB stores amounts in upokt (1 POKT = 1,000,000 upokt).
+// Users enter values in POKT; we convert to upokt before sending to the API.
+const UPOKT_MULTIPLIER = 1_000_000
+
+function parseValidAmount(val: any): number | undefined {
+  if (val === undefined || val === null || val === '') return undefined
+  const n = Number(val)
+  return isNaN(n) ? undefined : n
+}
+
 // 🔹 Debounce timer
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -152,8 +162,11 @@ async function prependNewTransactions() {
   if (currentPage.value !== 1) return
   if (transactions.value.length === 0) return
   if (isNodeFallback.value) return
-  // Skip prepend when any filter is active — fetched txs won't match the filter
-  if (statusFilter.value || selectedTypeTab.value !== 'all' || startDate.value || endDate.value || minAmount.value !== undefined || maxAmount.value !== undefined) return
+  // Skip prepend when any filter or non-default sort is active.
+  // fetchLatestTxsFromServer always returns timestamp-DESC data, so prepending
+  // into a fee/amount/block-sorted list would corrupt the sort order.
+  if (statusFilter.value || selectedTypeTab.value !== 'all' || startDate.value || endDate.value || parseValidAmount(minAmount.value) !== undefined || parseValidAmount(maxAmount.value) !== undefined) return
+  if (sortBy.value !== 'timestamp' || sortOrder.value !== 'desc') return
 
   isPrepending.value = true
 
@@ -334,11 +347,13 @@ async function loadTransactions() {
     } else if (selectedTypes.length > 1) {
       filters.types = selectedTypes
     }
-    if (statusFilter.value) filters.status = statusFilter.value === 'success' ? "true" : "pending"
+    if (statusFilter.value) filters.status = statusFilter.value  // 'success' or 'failed' — backend maps to DB values
     if (startDate.value) filters.start_date = new Date(startDate.value).toISOString()
     if (endDate.value) filters.end_date = new Date(endDate.value).toISOString()
-    if (minAmount.value !== undefined) filters.min_amount = minAmount.value
-    if (maxAmount.value !== undefined) filters.max_amount = maxAmount.value
+    const minAmt = parseValidAmount(minAmount.value)
+    const maxAmt = parseValidAmount(maxAmount.value)
+    if (minAmt !== undefined) filters.min_amount = Math.round(minAmt * UPOKT_MULTIPLIER)
+    if (maxAmt !== undefined) filters.max_amount = Math.round(maxAmt * UPOKT_MULTIPLIER)
 
     const serverData = await getTransactionsFromServer(filters)
     transactions.value = serverData.transactions
@@ -377,7 +392,9 @@ async function loadTransactions() {
     }
 
     // ✅ Race condition fix: agar load ke doran naya block aa gaya toh missed txs prepend karo
-    if (currentPage.value === 1 && !isNodeFallback.value && transactions.value.length > 0) {
+    // Only prepend when using default sort (timestamp DESC) — prepended txs are always timestamp-sorted
+    if (currentPage.value === 1 && !isNodeFallback.value && transactions.value.length > 0
+        && sortBy.value === 'timestamp' && sortOrder.value === 'desc') {
       const currentH = Number(currentBlockHeight.value)
       if (currentH > lastKnownBlockHeight.value) {
         await prependNewTransactions()
@@ -432,7 +449,7 @@ const getFailed24HTransactionsCount = async () => {
       chain: apiChainName,
       page: 1,
       limit: 1,
-      status: 'pending',
+      status: 'failed',
       start_date: yesterday.toISOString(),
       end_date: now.toISOString(),
     })
@@ -650,13 +667,13 @@ onMounted(async () => {
               <label class="label py-1">
                 <span class="label-text text-xs font-medium flex items-center gap-1.5">
                   <Icon icon="mdi:currency-usd" class="text-sm" />
-                  Amount Range
+                  Amount Range (POKT)
                 </span>
               </label>
               <div class="flex gap-2">
-                <input v-model.number="minAmount" type="number" class="input input-bordered input-xs h-8 text-xs flex-1" placeholder="Min" />
+                <input v-model.number="minAmount" type="number" min="0" step="0.000001" class="input input-bordered input-xs h-8 text-xs flex-1" placeholder="Min POKT" />
                 <span class="self-center text-xs text-base-content/50">-</span>
-                <input v-model.number="maxAmount" type="number" class="input input-bordered input-xs h-8 text-xs flex-1" placeholder="Max" />
+                <input v-model.number="maxAmount" type="number" min="0" step="0.000001" class="input input-bordered input-xs h-8 text-xs flex-1" placeholder="Max POKT" />
               </div>
             </div>
           </div>

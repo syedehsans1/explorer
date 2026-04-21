@@ -36,38 +36,8 @@ const servicesFilter = ref<string>('all');
 const sortBy = ref<'stake' | 'services'>('stake');
 const sortOrder = ref<'desc' | 'asc'>('desc');
 
-// 🔹 Client-side filtering and sorting
-const sortedList = computed(() => {
-  let filtered = list.value.filter((item: any) => {
-    const status = getSupplierStatus(item).label;
-    if (statusFilter.value !== 'all') {
-      if (statusFilter.value === 'staked' && status !== 'Staked') return false;
-      if (statusFilter.value === 'unstaked' && status !== 'Unstaked') return false;
-      if (statusFilter.value === 'unstaking' && status !== 'Unstaking') return false;
-    }
-
-    const serviceCount = item.services?.length || 0;
-    if (servicesFilter.value !== 'all') {
-      if (servicesFilter.value === 'high' && serviceCount < 5) return false;
-      if (servicesFilter.value === 'medium' && (serviceCount < 2 || serviceCount > 4)) return false;
-      if (servicesFilter.value === 'none' && serviceCount !== 0) return false;
-    }
-
-    return true;
-  });
-
-  return [...filtered].sort((a: any, b: any) => {
-    if (sortBy.value === 'services') {
-      const aLen = a.services?.length || 0;
-      const bLen = b.services?.length || 0;
-      return sortOrder.value === 'desc' ? bLen - aLen : aLen - bLen;
-    }
-    // default: stake
-    const aValue = parseInt(a.stake?.amount || '0');
-    const bValue = parseInt(b.stake?.amount || '0');
-    return sortOrder.value === 'desc' ? bValue - aValue : aValue - bValue;
-  });
-});
+// Server handles all filtering and sorting
+const sortedList = computed(() => list.value)
 
 // 🔹 Watch for page changes
 watch(currentPage, () => {
@@ -80,26 +50,67 @@ watch(itemsPerPage, () => {
   loadSuppliers();
 });
 
-// 🔹 Load data from RPC
+// 🔹 Watch for filter/sort changes — reset to page 1 and reload
+watch(statusFilter, () => { currentPage.value = 1; loadSuppliers(); });
+watch(servicesFilter, () => { currentPage.value = 1; loadSuppliers(); });
+watch(sortBy, () => { currentPage.value = 1; loadSuppliers(); });
+watch(sortOrder, () => { currentPage.value = 1; loadSuppliers(); });
+
+// 🔹 Load data from API (server-side filter, sort, pagination)
 async function loadSuppliers() {
-  if (!chainStore.rpc) {
-    await waitForRpc();
-  }
-  
   loading.value = true;
   try {
-    pageRequest.value.setPageSize(itemsPerPage.value);
-    pageRequest.value.setPage(currentPage.value);
-    pageRequest.value.count_total = true;
-    
-    const response = await chainStore.rpc.getSuppliers(pageRequest.value);
-    list.value = response.supplier || [];
-    pageResponse.value = response.pagination || {};
+    const params = new URLSearchParams();
+    params.append('chain', apiChainName.value);
+    params.append('page', currentPage.value.toString());
+    params.append('limit', itemsPerPage.value.toString());
+    params.append('sort_by', sortBy.value);
+    params.append('sort_order', sortOrder.value);
 
-    // 🔹 Trigger async, batched balance fetching (non-blocking for main loading state)
-    fetchBalancesInBatches().catch((e) => {
-      console.error('Error fetching supplier balances in batches:', e);
-    });
+    // Status filter — map UI values to API values
+    if (statusFilter.value !== 'all') {
+      params.append('status', statusFilter.value); // 'staked'|'unstaking'|'unstaked' — backend maps 'unstaking'→'unstake_requested'
+    }
+
+    // Services count filter
+    if (servicesFilter.value === 'high') {
+      params.append('min_services', '5');
+    } else if (servicesFilter.value === 'medium') {
+      params.append('min_services', '2');
+      params.append('max_services', '4');
+    } else if (servicesFilter.value === 'none') {
+      params.append('max_services', '0');
+    }
+
+    const apiRes = await fetch(`/api/v1/suppliers?${params.toString()}`);
+    const apiData = await apiRes.json();
+
+    if (apiRes.ok && apiData.data) {
+      list.value = apiData.data.map((item: any) => ({
+        operator_address: item.address,
+        owner_address: item.owner_address || '',
+        stake: {
+          denom: item.stake_denom || 'upokt',
+          amount: (item.staked_amount || '0').toString()
+        },
+        services: (item.service_ids || []).map((id: string) => ({ service_id: id, service_name: '' })),
+        status: item.status,
+        unstake_session_end_height: item.unstake_session_end_height,
+        balance: undefined
+      }));
+      pageResponse.value = {
+        total: apiData.meta?.total?.toString() || '0',
+        next_key: undefined
+      };
+      // 🔹 Fetch balances async without blocking render
+      fetchBalancesInBatches().catch((e) => {
+        console.error('Error fetching supplier balances in batches:', e);
+      });
+    } else {
+      console.error('Error loading suppliers from API:', apiData);
+      list.value = [];
+      pageResponse.value = {} as Pagination;
+    }
   } catch (error) {
     console.error('Error loading suppliers:', error);
     list.value = [];

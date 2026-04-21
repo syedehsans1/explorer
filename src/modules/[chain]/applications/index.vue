@@ -44,81 +44,23 @@ const totalPages = computed(() => {
 
 const totalApplications = computed(() => parseInt(pageResponse.value.total || '0'))
 
-// Extract unique service names from all loaded applications
-const availableServices = computed(() => {
-  const services = new Set<string>()
-  list.value.forEach((app) => {
-    if (app.service_configs && Array.isArray(app.service_configs)) {
-      app.service_configs.forEach((sc: any) => {
-        const serviceName = sc.service_name?.length > 0 ? sc.service_name : sc.service_id
-        if (serviceName) {
-          services.add(serviceName)
-        }
-      })
+// Accumulates all chain IDs ever seen — never shrinks when a filter is applied
+const allKnownChains = ref<string[]>([])
+
+const availableServices = computed(() => allKnownChains.value)
+
+function mergeKnownChains(apps: Application[]) {
+  const merged = new Set(allKnownChains.value)
+  apps.forEach((app) => {
+    if (app.chains && Array.isArray(app.chains)) {
+      app.chains.forEach((c: string) => { if (c) merged.add(c) })
     }
   })
-  return Array.from(services).sort()
-})
-
-// Filter by service helper function
-function filterByService(item: Application, serviceName: string): boolean {
-  if (!serviceName) return true
-  if (!item.service_configs || !Array.isArray(item.service_configs)) return false
-  
-  return item.service_configs.some((sc: any) => {
-    const scName = sc.service_name?.length > 0 ? sc.service_name : sc.service_id
-    return scName === serviceName
-  })
+  allKnownChains.value = Array.from(merged).sort()
 }
 
-// Client-side filtering and sorting (applied after server returns page data)
-const sortedList = computed(() => {
-  // First apply service filter (client-side)
-  let filtered = list.value.filter((item) => filterByService(item, serviceFilter.value))
-  
-  // Then apply sorting
-  return filtered.sort((a, b) => {
-    if (sortBy.value === 'stake') {
-      const aStake = parseInt(a.stake?.amount || '0')
-      const bStake = parseInt(b.stake?.amount || '0')
-      return sortOrder.value === 'desc' ? bStake - aStake : aStake - bStake
-    } else if (sortBy.value === 'services') {
-      const aServices = a.service_configs?.length || 0
-      const bServices = b.service_configs?.length || 0
-      if (aServices !== bServices) {
-        return sortOrder.value === 'desc' ? bServices - aServices : aServices - bServices
-      }
-      // If same count, sort alphabetically by first service name
-      const aFirstService = a.service_configs?.[0] 
-        ? (a.service_configs[0].service_name?.length > 0 ? a.service_configs[0].service_name : a.service_configs[0].service_id) || ''
-        : ''
-      const bFirstService = b.service_configs?.[0]
-        ? (b.service_configs[0].service_name?.length > 0 ? b.service_configs[0].service_name : b.service_configs[0].service_id) || ''
-        : ''
-      const comparison = aFirstService.localeCompare(bFirstService)
-      return sortOrder.value === 'desc' ? -comparison : comparison
-    } else if (sortBy.value === 'status') {
-      const aStatus = getApplicationStatus(a)
-      const bStatus = getApplicationStatus(b)
-      const aIsStaked = aStatus.label === 'Staked'
-      const bIsStaked = bStatus.label === 'Staked'
-      
-      if (aIsStaked !== bIsStaked) {
-        // Staked comes before Unstaked when descending, vice versa when ascending
-        if (sortOrder.value === 'desc') {
-          return aIsStaked ? -1 : 1
-        } else {
-          return aIsStaked ? 1 : -1
-        }
-      }
-      // If same status, sort by stake amount
-      const aStake = parseInt(a.stake?.amount || '0')
-      const bStake = parseInt(b.stake?.amount || '0')
-      return sortOrder.value === 'desc' ? bStake - aStake : aStake - bStake
-    }
-    return 0
-  })
-})
+// Server handles all filtering and sorting — sortedList is just the raw list
+const sortedList = computed(() => list.value)
 
 // 🔹 Watch for page changes
 watch(currentPage, () => {
@@ -142,8 +84,16 @@ watch(statusFilter, () => {
   loadApplications()
 })
 
-// 🔹 Watch for sort changes (no API call needed, just re-sort client-side via computed)
-// Note: sortBy and sortOrder changes are handled automatically by the sortedList computed property
+// 🔹 Watch for sort changes — server-side sort, must reload
+watch(sortBy, () => {
+  currentPage.value = 1
+  loadApplications()
+})
+
+watch(sortOrder, () => {
+  currentPage.value = 1
+  loadApplications()
+})
 
 // Load data from API
 async function loadApplications() {
@@ -155,13 +105,20 @@ async function loadApplications() {
     params.append('page', currentPage.value.toString())
     params.append('limit', itemsPerPage.value.toString())
     
-    // Add status filter if not 'all'
+    // Status filter — send UI value directly, backend handles 'unstaked' → IN clause
     if (statusFilter.value !== 'all') {
-      // Map UI filter values to API status values
-      const apiStatus = statusFilter.value === 'unstaked' ? 'unstake_requested' : statusFilter.value
-      params.append('status', apiStatus)
+      params.append('status', statusFilter.value)
     }
-    
+
+    // Service chain filter (filter apps that serve this chain ID)
+    if (serviceFilter.value) {
+      params.append('service_chain', serviceFilter.value)
+    }
+
+    // Sort params
+    params.append('sort_by', sortBy.value)
+    params.append('sort_order', sortOrder.value)
+
     const apiUrl = `/api/v1/applications?${params.toString()}`
     const apiRes = await fetch(apiUrl)
     const apiData = await apiRes.json()
@@ -185,6 +142,9 @@ async function loadApplications() {
         state: item.state
       }))
       
+      // Accumulate chain IDs for the service filter dropdown (never shrinks on filter)
+      mergeKnownChains(list.value)
+
       // Map pagination response
       pageResponse.value = {
         total: apiData.meta?.total?.toString() || '0',

@@ -350,8 +350,8 @@ const paginatedValidators = computed(() => {
   return validatorsList.value.slice(start, end)
 })
 
-// Reset to first page when filters change
-watch([itemsPerPage, selectedStatus], () => {
+// Reset to first page when filters or sort changes
+watch([itemsPerPage, selectedStatus, sortBy, sortOrder], () => {
   currentPage.value = 1
 })
 

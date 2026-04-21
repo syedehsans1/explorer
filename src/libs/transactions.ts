@@ -101,6 +101,22 @@ export async function fetchTransactions(
       if (sort_by === 'block_height') {
         return sort_order === 'desc' ? b.block_height - a.block_height : a.block_height - b.block_height;
       }
+      if (sort_by === 'amount') {
+        const diff = parseFloat(b.amount) - parseFloat(a.amount);
+        return sort_order === 'desc' ? diff : -diff;
+      }
+      if (sort_by === 'fee') {
+        const diff = parseFloat(b.fee) - parseFloat(a.fee);
+        return sort_order === 'desc' ? diff : -diff;
+      }
+      if (sort_by === 'type') {
+        const diff = (a.type || '').localeCompare(b.type || '');
+        return sort_order === 'desc' ? -diff : diff;
+      }
+      if (sort_by === 'status') {
+        const diff = String(a.status || '').localeCompare(String(b.status || ''));
+        return sort_order === 'desc' ? -diff : diff;
+      }
       return 0;
     });
 

@@ -108,6 +108,14 @@ const typeTabMap: Record<string, string[]> = {
   ]
 };
 
+const UPOKT_MULTIPLIER = 1_000_000
+
+function parseValidAmount(val: any): number | undefined {
+  if (val === undefined || val === null || val === '') return undefined
+  const n = Number(val)
+  return isNaN(n) ? undefined : n
+}
+
 let txDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resetAccountState() {
@@ -496,22 +504,18 @@ async function loadTransactions(address: string) {
     }
 
     if (txStatusFilter.value) {
-      filters.status = txStatusFilter.value == 'success' ? "true" : "pending";
+      filters.status = txStatusFilter.value; // 'success' or 'failed' — backend maps correctly
     }
     if (txStartDate.value) {
-      // Convert datetime-local to ISO 8601
       filters.start_date = new Date(txStartDate.value).toISOString();
     }
     if (txEndDate.value) {
-      // Convert datetime-local to ISO 8601
       filters.end_date = new Date(txEndDate.value).toISOString();
     }
-    if (txMinAmount.value !== undefined) {
-      filters.min_amount = txMinAmount.value;
-    }
-    if (txMaxAmount.value !== undefined) {
-      filters.max_amount = txMaxAmount.value;
-    }
+    const minAmt = parseValidAmount(txMinAmount.value)
+    const maxAmt = parseValidAmount(txMaxAmount.value)
+    if (minAmt !== undefined) filters.min_amount = Math.round(minAmt * UPOKT_MULTIPLIER)
+    if (maxAmt !== undefined) filters.max_amount = Math.round(maxAmt * UPOKT_MULTIPLIER)
 
     const data = await fetchTransactionsWithFallback(filters, {
       chainStore: blockchain,
@@ -547,10 +551,13 @@ watch([selectedTypeTab, txStatusFilter, txStartDate, txEndDate, txMinAmount, txM
   }
 });
 
-watch([currentTxPage, txItemsPerPage], () => {
-  if (props.address) {
-    loadTransactions(props.address);
-  }
+watch(currentTxPage, () => {
+  if (props.address) loadTransactions(props.address);
+});
+
+watch(txItemsPerPage, () => {
+  currentTxPage.value = 1;
+  if (props.address) loadTransactions(props.address);
 });
 
 function setCurrentTxPage(page: number) {
