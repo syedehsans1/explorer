@@ -398,47 +398,14 @@ async function loadServiceRewards() {
     if (serviceRewardsDays.value) {
       params.append('days', serviceRewardsDays.value.toString());
     }
+    // Pass sort to the API so the DB handles ordering correctly
+    params.append('sort_by', serviceRewardsSortBy.value);
+    params.append('sort_order', serviceRewardsSortOrder.value);
 
     const data = await fetchApi('/api/v1/claims/rewards', params);
     serviceRewards.value = data.data || [];
     serviceRewardsMeta.value = data.meta || null;
-    
-    // Apply client-side sorting
-    if (serviceRewardsSortBy.value) {
-      serviceRewards.value.sort((a, b) => {
-        let aVal: any, bVal: any;
-        switch (serviceRewardsSortBy.value) {
-          case 'rewards':
-            aVal = parseInt(a.total_rewards_upokt || '0');
-            bVal = parseInt(b.total_rewards_upokt || '0');
-            break;
-          case 'relays':
-            aVal = parseInt(a.total_relays || '0');
-            bVal = parseInt(b.total_relays || '0');
-            break;
-          case 'efficiency':
-            aVal = parseFloat(a.avg_efficiency_percent || '0');
-            bVal = parseFloat(b.avg_efficiency_percent || '0');
-            break;
-          case 'submissions':
-            aVal = parseInt(a.total_submissions || '0');
-            bVal = parseInt(b.total_submissions || '0');
-            break;
-          case 'reward_per_relay':
-            aVal = parseFloat(a.avg_reward_per_relay || '0');
-            bVal = parseFloat(b.avg_reward_per_relay || '0');
-            break;
-          default:
-            return 0;
-        }
-        if (serviceRewardsSortOrder.value === 'asc') {
-          return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-        } else {
-          return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
-        }
-      });
-    }
-    
+
     updateServiceCharts();
   } catch (error: any) {
     console.error('Error loading service rewards:', error);

@@ -1546,8 +1546,6 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
             <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Service</th>
-              <th>Operator Address</th>
-              <th>Application Address</th>
               <th>Total Rewards</th>
               <th>Total Relays</th>
               <th>Avg Reward/Relay</th>
@@ -1560,22 +1558,6 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             <tr v-for="service in paginatedServiceRewards" :key="service.service_id" class="hover:bg-base-200 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
               <td class="dark:bg-base-200 bg-white">
                 <span class="badge badge-primary h-8 text-xs leading-4 px-2">{{ service.service_id }}</span>
-              </td>
-              <td class="dark:bg-base-200 bg-white">
-                <RouterLink
-                  :to="`/${chainStore.chainName}/account/${service.supplier_operator_address}`"
-                  class="text-sm text-[#09279F] dark:invert font-medium hover:underline"
-                >
-                  {{ service.supplier_operator_address.substring(0, 12) }}...{{ service.supplier_operator_address.substring(service.supplier_operator_address.length - 7) }}
-                </RouterLink>
-              </td>
-              <td class="dark:bg-base-200 bg-white">
-                <RouterLink
-                  :to="`/${chainStore.chainName}/account/${service.application_address}`"
-                  class="text-sm text-[#09279F] dark:invert font-medium hover:underline"
-                >
-                  {{ service.application_address.substring(0, 12) }}...{{ service.application_address.substring(service.application_address.length - 7) }}
-                </RouterLink>
               </td>
               <td class="dark:bg-base-200 bg-white font-semibold text-success">
                 {{ format.formatToken({ denom: 'upokt', amount: String(service.total_rewards_upokt) }) }}
