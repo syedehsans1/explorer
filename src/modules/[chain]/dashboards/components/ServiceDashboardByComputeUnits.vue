@@ -1025,8 +1025,8 @@ async function loadRewardShareData() {
 
     // Get supplier addresses from filters (may be comma-separated)
     const supplierFilter = props.filters?.supplier_address;
-    if (!supplierFilter) {
-      // No supplier filter - clear all data
+    if (!supplierFilter && !props.filters?.owner_address) {
+      // No filter at all - clear all data
       rewardShareDistribution.value = [];
       topRewardEarners.value = [];
       rewardEfficiencyAnalysis.value = [];
@@ -1133,47 +1133,19 @@ async function loadRewardShareData() {
         }
       });
     } else {
-      // Group by owner address
-      const ownerMap = new Map<string, {
-        rewards: number;
-        suppliers: Set<string>;
-        relays: number;
-        efficiency: number;
-        compute_units: number;
-      }>();
-      
+      // Specific operators were selected — show per-operator data so each operator's
+      // share is visible individually (single operator = 1 slice, multiple = N slices)
       supplierMap.forEach((data, supplier) => {
-        const owner = data.owner || supplier;
-        const existing = ownerMap.get(owner) || {
-          rewards: 0,
-          suppliers: new Set(),
-          relays: 0,
-          efficiency: 0,
-          compute_units: 0
-        };
-        existing.rewards += data.rewards;
-        existing.suppliers.add(supplier);
-        existing.relays += data.relays;
-        existing.compute_units += data.compute_units;
-        ownerMap.set(owner, existing);
-      });
-
-      ownerMap.forEach((data, owner) => {
-        // Calculate weighted average efficiency
-        const avgEfficiency = supplierMap.size > 0
-          ? Array.from(data.suppliers).reduce((sum, s) => sum + (supplierMap.get(s)?.efficiency || 0), 0) / data.suppliers.size
-          : 0;
-
         rewardShareEntries.push({
-          account: owner,
-          moniker: null, // Supplier metadata not available in list endpoint
+          account: supplier,
+          moniker: data.supplier?.moniker || null,
           total_rewards: data.rewards / 1000000,
           share_percent: totalRewardsUpokt > 0 ? (data.rewards / totalRewardsUpokt) * 100 : 0,
           total_relays: data.relays,
-          efficiency: avgEfficiency,
+          efficiency: data.efficiency,
           compute_units: data.compute_units,
-          nodes: data.suppliers.size,
-          status: null // Supplier metadata not available in list endpoint
+          nodes: 1,
+          status: data.supplier?.status || null
         });
       });
     }
