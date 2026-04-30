@@ -953,8 +953,8 @@ async function loadServicesSummary24h() {
     if (!text) throw new Error('Empty response from API');
     const result = JSON.parse(text);
     if (response.ok && result?.data) {
-      totalRelays24h.value = (Number(result.data.relays || 0) + Number(result.data.estimated_relays || 0))/1.95;
-      totalComputeUnits24h.value = (Number(result.data.claimed_compute_units || 0) + Number(result.data.estimated_compute_units || 0))/2.1;
+      totalRelays24h.value = result.data.estimated_relays;
+      totalComputeUnits24h.value = result.data.estimated_compute_units;
     } else {
       totalRelays24h.value = 0;
       totalComputeUnits24h.value = 0;
@@ -1222,7 +1222,7 @@ async function loadNetworkGrowthPerformance(windowDays: number = 7) {
 
     historicalData.value.series[4].data = relaysDaily as never[];
     historicalData.value.series[5].data = claimedCUDaily as never[];
-    historicalData.value.series[6].data = claimedCUDaily as never[];
+    historicalData.value.series[6].data = estimatedCUDaily as never[];
   } catch (e) {
     console.error('Error loading network growth performance:', e);
   }

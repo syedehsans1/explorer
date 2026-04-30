@@ -347,6 +347,12 @@ const topServicesByEfficiency = computed(() =>
 // Page change → table only (top cards stay stable)
 watch(serviceRewardsPage, () => { loadServiceRewards(); });
 
+// Limit change → reset to page 1 and reload table
+watch(serviceRewardsLimit, () => {
+  serviceRewardsPage.value = 1;
+  loadServiceRewards();
+});
+
 // Days change → reset page, reload everything
 watch(serviceRewardsDays, () => {
   serviceRewardsPage.value = 1;
