@@ -959,16 +959,21 @@ async function loadTopServicesByComputeUnits() {
   try {
     const params = new URLSearchParams();
     params.append('limit', topServicesLimit.value.toString());
-    params.append('days', topServicesDays.value.toString());
     params.append('chain', apiChainName.value);
-    // Add filter support
+    // Explicit date range from parent takes priority over internal days selector
+    if (props.startDate && props.endDate) {
+      params.append('start_date', props.startDate);
+      params.append('end_date', props.endDate);
+    } else {
+      params.append('days', topServicesDays.value.toString());
+    }
     const supplierFilter = props.filters?.supplier_address;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
-    
+
     const data = await fetchApi('/api/v1/services/top-by-compute-units', params);
-      topServicesByComputeUnits.value = data.data || [];
-      updateTopServicesChart();
+    topServicesByComputeUnits.value = data.data || [];
+    updateTopServicesChart();
   } catch (error: any) {
     console.error('Error loading top services by compute units:', error);
     topServicesByComputeUnits.value = [];
@@ -981,19 +986,22 @@ async function loadTopServicesByPerformance() {
   loadingPerformanceTable.value = true;
   try {
     const params = new URLSearchParams();
-    // params.append('limit', itemsPerPages.value.toString());
     params.append('limit', rewardItemsPerPage.value.toString());
-    params.append('days', performanceDays.value.toString());
     params.append('chain', apiChainName.value);
-    // Add filter support
+    // Explicit date range from parent takes priority over internal days selector
+    if (props.startDate && props.endDate) {
+      params.append('start_date', props.startDate);
+      params.append('end_date', props.endDate);
+    } else {
+      params.append('days', performanceDays.value.toString());
+    }
     const supplierFilter = props.filters?.supplier_address;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
-    
+
     const data = await fetchApi('/api/v1/services/top-by-performance', params);
-      topServicesByPerformance.value = data.data || [];
-      totalComputeUnits.value = data.total_compute_units || 0;
-    // Update the chart data based on the new top services
+    topServicesByPerformance.value = data.data || [];
+    totalComputeUnits.value = data.total_compute_units || 0;
     updateTopServicesChart();
   } catch (error: any) {
     console.error('Error loading top services by performance:', error);
@@ -1760,20 +1768,20 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div v-if="loadingTopServices" class="flex justify-center items-center h-64">
             <div class="loading loading-spinner loading-sm"></div>
           </div>
-          <div v-else-if="topServicesByComputeUnits.length === 0" class="flex justify-center items-center h-64 text-gray-500 text-xs">
+          <div v-else-if="topServicesByPerformance.length === 0" class="flex justify-center items-center h-64 text-gray-500 text-xs">
             No data
           </div>
           <div v-else class="h-[35vh]">
-            <ApexCharts 
-              :type="topServicesChartType" 
-              height="360" 
-              :options="topServicesChartOptions" 
+            <ApexCharts
+              :type="topServicesChartType"
+              height="360"
+              :options="topServicesChartOptions"
               :series="topServicesChartSeries"
               :key="`topServices-${topServicesChartType}`"
             />
           </div>
           <!-- Chart Type Selector - Bottom Right -->
-          <div v-if="!loadingTopServices && topServicesByComputeUnits.length > 0" class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
+          <div v-if="!loadingTopServices && topServicesByPerformance.length > 0" class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
             <button
               @click="topServicesChartType = 'bar'"
               :class="[
