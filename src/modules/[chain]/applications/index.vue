@@ -4,6 +4,7 @@ import { useBlockchain, useFormatter } from '@/stores'
 import { PageRequest, type Pagination, type Application, type Coin } from '@/types'
 import type { PaginatedBalances } from '@/types/bank'
 import { Icon } from '@iconify/vue'
+import TablePagination from '@/components/TablePagination.vue'
 
 const props = defineProps<{ chain: string }>()
 
@@ -43,81 +44,23 @@ const totalPages = computed(() => {
 
 const totalApplications = computed(() => parseInt(pageResponse.value.total || '0'))
 
-// Extract unique service names from all loaded applications
-const availableServices = computed(() => {
-  const services = new Set<string>()
-  list.value.forEach((app) => {
-    if (app.service_configs && Array.isArray(app.service_configs)) {
-      app.service_configs.forEach((sc: any) => {
-        const serviceName = sc.service_name?.length > 0 ? sc.service_name : sc.service_id
-        if (serviceName) {
-          services.add(serviceName)
-        }
-      })
+// Accumulates all chain IDs ever seen — never shrinks when a filter is applied
+const allKnownChains = ref<string[]>([])
+
+const availableServices = computed(() => allKnownChains.value)
+
+function mergeKnownChains(apps: Application[]) {
+  const merged = new Set(allKnownChains.value)
+  apps.forEach((app) => {
+    if (app.chains && Array.isArray(app.chains)) {
+      app.chains.forEach((c: string) => { if (c) merged.add(c) })
     }
   })
-  return Array.from(services).sort()
-})
-
-// Filter by service helper function
-function filterByService(item: Application, serviceName: string): boolean {
-  if (!serviceName) return true
-  if (!item.service_configs || !Array.isArray(item.service_configs)) return false
-  
-  return item.service_configs.some((sc: any) => {
-    const scName = sc.service_name?.length > 0 ? sc.service_name : sc.service_id
-    return scName === serviceName
-  })
+  allKnownChains.value = Array.from(merged).sort()
 }
 
-// Client-side filtering and sorting (applied after server returns page data)
-const sortedList = computed(() => {
-  // First apply service filter (client-side)
-  let filtered = list.value.filter((item) => filterByService(item, serviceFilter.value))
-  
-  // Then apply sorting
-  return filtered.sort((a, b) => {
-    if (sortBy.value === 'stake') {
-      const aStake = parseInt(a.stake?.amount || '0')
-      const bStake = parseInt(b.stake?.amount || '0')
-      return sortOrder.value === 'desc' ? bStake - aStake : aStake - bStake
-    } else if (sortBy.value === 'services') {
-      const aServices = a.service_configs?.length || 0
-      const bServices = b.service_configs?.length || 0
-      if (aServices !== bServices) {
-        return sortOrder.value === 'desc' ? bServices - aServices : aServices - bServices
-      }
-      // If same count, sort alphabetically by first service name
-      const aFirstService = a.service_configs?.[0] 
-        ? (a.service_configs[0].service_name?.length > 0 ? a.service_configs[0].service_name : a.service_configs[0].service_id) || ''
-        : ''
-      const bFirstService = b.service_configs?.[0]
-        ? (b.service_configs[0].service_name?.length > 0 ? b.service_configs[0].service_name : b.service_configs[0].service_id) || ''
-        : ''
-      const comparison = aFirstService.localeCompare(bFirstService)
-      return sortOrder.value === 'desc' ? -comparison : comparison
-    } else if (sortBy.value === 'status') {
-      const aStatus = getApplicationStatus(a)
-      const bStatus = getApplicationStatus(b)
-      const aIsStaked = aStatus.label === 'Staked'
-      const bIsStaked = bStatus.label === 'Staked'
-      
-      if (aIsStaked !== bIsStaked) {
-        // Staked comes before Unstaked when descending, vice versa when ascending
-        if (sortOrder.value === 'desc') {
-          return aIsStaked ? -1 : 1
-        } else {
-          return aIsStaked ? 1 : -1
-        }
-      }
-      // If same status, sort by stake amount
-      const aStake = parseInt(a.stake?.amount || '0')
-      const bStake = parseInt(b.stake?.amount || '0')
-      return sortOrder.value === 'desc' ? bStake - aStake : aStake - bStake
-    }
-    return 0
-  })
-})
+// Server handles all filtering and sorting — sortedList is just the raw list
+const sortedList = computed(() => list.value)
 
 // 🔹 Watch for page changes
 watch(currentPage, () => {
@@ -141,8 +84,16 @@ watch(statusFilter, () => {
   loadApplications()
 })
 
-// 🔹 Watch for sort changes (no API call needed, just re-sort client-side via computed)
-// Note: sortBy and sortOrder changes are handled automatically by the sortedList computed property
+// 🔹 Watch for sort changes — server-side sort, must reload
+watch(sortBy, () => {
+  currentPage.value = 1
+  loadApplications()
+})
+
+watch(sortOrder, () => {
+  currentPage.value = 1
+  loadApplications()
+})
 
 // Load data from API
 async function loadApplications() {
@@ -154,11 +105,20 @@ async function loadApplications() {
     params.append('page', currentPage.value.toString())
     params.append('limit', itemsPerPage.value.toString())
     
-    // Add status filter if not 'all'
+    // Status filter — send UI value directly, backend handles 'unstaked' → IN clause
     if (statusFilter.value !== 'all') {
       params.append('status', statusFilter.value)
     }
-    
+
+    // Service chain filter (filter apps that serve this chain ID)
+    if (serviceFilter.value) {
+      params.append('service_chain', serviceFilter.value)
+    }
+
+    // Sort params
+    params.append('sort_by', sortBy.value)
+    params.append('sort_order', sortOrder.value)
+
     const apiUrl = `/api/v1/applications?${params.toString()}`
     const apiRes = await fetch(apiUrl)
     const apiData = await apiRes.json()
@@ -182,6 +142,9 @@ async function loadApplications() {
         state: item.state
       }))
       
+      // Accumulate chain IDs for the service filter dropdown (never shrinks on filter)
+      mergeKnownChains(list.value)
+
       // Map pagination response
       pageResponse.value = {
         total: apiData.meta?.total?.toString() || '0',
@@ -256,29 +219,12 @@ async function fetchBalancesInBatches() {
   }
 }
 
-// Pagination methods
-function goToFirst() {
-  if (currentPage.value !== 1) {
-    currentPage.value = 1
-  }
+function setCurrentPage(page: number) {
+  currentPage.value = page
 }
 
-function goToLast() {
-  if (currentPage.value !== totalPages.value && totalPages.value > 0) {
-    currentPage.value = totalPages.value
-  }
-}
-
-function nextPage() {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
-  }
-}
-
-function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value--
-  }
+function setItemsPerPage(size: number) {
+  itemsPerPage.value = size
 }
 
 // Helper function to truncate address
@@ -321,7 +267,7 @@ const networkStats = ref({
   applications: 0,
   totalStakedAmount: 0,
   unstakingCount: 0,
-  totalUnstakingTokens: 0,
+  totalUnstakingTokens24h: 0,
 })
 
 // Cache control
@@ -364,14 +310,28 @@ async function loadNetworkStats() {
       const apiUrl = `/api/v1/applications?chain=${apiChainName.value}&page=1&limit=1`
       const apiRes = await fetch(apiUrl)
       const apiData = await apiRes.json()
-      
+
       if (apiRes.ok && apiData.meta) {
         networkStats.value.totalStakedAmount = apiData.meta.totalStakedAmount || 0
         networkStats.value.unstakingCount = apiData.meta.unstakingCount || 0
-        networkStats.value.totalUnstakingTokens = apiData.meta.totalUnstakingTokens || 0
       }
     } catch (apiError) {
       console.error('Error loading API stats:', apiError)
+    }
+
+    // Calculate 24h unstaking tokens: fetch unstake_requested apps, filter by last_seen within 24h
+    try {
+      const unstakingUrl = `/api/v1/applications?chain=${apiChainName.value}&page=1&limit=500&status=unstake_requested`
+      const unstakingRes = await fetch(unstakingUrl)
+      const unstakingData = await unstakingRes.json()
+      if (unstakingRes.ok && unstakingData.data) {
+        const yesterday = Date.now() - 24 * 60 * 60 * 1000
+        networkStats.value.totalUnstakingTokens24h = unstakingData.data
+          .filter((app: any) => app.last_seen && new Date(app.last_seen).getTime() > yesterday)
+          .reduce((sum: number, app: any) => sum + Number(app.staked_amount || 0), 0)
+      }
+    } catch (e) {
+      console.error('Error computing application 24h unstaking tokens:', e)
     }
     
     networkStatsCacheTime.value = now
@@ -406,8 +366,8 @@ async function loadNetworkStats() {
       </div>
       <div class="flex bg-[#ffffff] hover:bg-base-200 p-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <span>
-          <div class="text-xs text-[#64748B]">Unstaking Tokens</div>
-          <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens.toString() }) }}</div>
+          <div class="text-xs text-[#64748B]">Unstaking Tokens (24h)</div>
+          <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens24h.toString() }) }}</div>
         </span>
       </div>
     </div>
@@ -468,9 +428,10 @@ async function loadNetworkStats() {
     </div>
 
     <div class="bg-base-200 p-2 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+      <div class="overflow-auto" style="max-height:calc(100vh - 22rem)">
       <table class="table w-full table-compact rounded-xl">
         <thead class="bg-base-200 dark:bg-[rgba(255,255,255,.03)] sticky top-0 border-0">
-          <tr class="text-sm font-semibold">
+          <tr class="text-sm font-semibold bg-base-200">
             <th>Rank</th>
             <th>Address</th>
             <th>Stake</th>
@@ -593,67 +554,18 @@ async function loadNetworkStats() {
           </tr>
         </tbody>
       </table>
-
-      <!-- Pagination Bar -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <!-- Page Size Dropdown -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">Show:</span>
-          <select 
-            v-model="itemsPerPage" 
-            class="select select-bordered select-sm w-20"
-          >
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-          <span class="text-sm text-gray-600">per page</span>
-        </div>
-
-        <!-- Pagination Info and Controls -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalApplications) }} of {{ totalApplications }} applications
-          </span>
-          
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="prevPage"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage" 
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast" 
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>
       </div>
+
+      <TablePagination
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :total-items="totalApplications"
+        :items-per-page="itemsPerPage"
+        item-label="applications"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setCurrentPage"
+        @update:items-per-page="setItemsPerPage"
+      />
     </div>
   </div>
 </template>
@@ -665,13 +577,3 @@ async function loadNetworkStats() {
     }
   }
   </route>
-<style scoped>
-.page-btn:hover {
-  background-color: #e9ecef;
-}
-
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-</style>

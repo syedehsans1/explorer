@@ -6,6 +6,7 @@ import { useBaseStore, useBlockchain } from '@/stores';
 import { getMarketPriceChartConfig, colorVariables } from '@/components/charts/apexChartConfig';
 import type { ValidatorPerformanceRow } from '@/types/validators';
 import { useValidatorPerformance } from '../composables/useValidatorPerformance';
+import TablePagination from '@/components/TablePagination.vue';
 
 const props = defineProps<{
   filters: {
@@ -165,6 +166,10 @@ const cuSeries = computed(() => [{ name: 'Claimed CU', data: (daily.list.value?.
 // Leaderboard rows (totals per validator)
 const tableRows = computed(() => totals.list.value?.data || []);
 const meta = computed(() => totals.list.value?.meta);
+const leaderboardTotalItems = computed(() => meta.value?.total || tableRows.value.length);
+const leaderboardCurrentPage = computed(() => meta.value?.page || 1);
+const leaderboardTotalPages = computed(() => meta.value?.totalPages || 0);
+const leaderboardItemsPerPage = computed(() => meta.value?.limit || props.pageSize || 25);
 
 function formatNum(n: number | null | undefined) { return new Intl.NumberFormat().format(n || 0); }
 function effColor(v: number | null) {
@@ -174,11 +179,9 @@ function effColor(v: number | null) {
   return 'text-error';
 }
 
-function changePage(delta: number) {
-  if (!meta.value) return;
-  const next = Math.min(Math.max(1, meta.value.page + delta), meta.value.totalPages);
-  if (next === meta.value.page) return;
-  totals.filters.value = { ...totals.filters.value, page: next };
+function setLeaderboardPage(page: number) {
+  if (!meta.value || page === meta.value.page) return;
+  totals.filters.value = { ...totals.filters.value, page };
 }
 </script>
 
@@ -307,7 +310,7 @@ function changePage(delta: number) {
       <div class="bg-base-200 rounded-md overflow-auto">
         <table class="table table-compact w-full">
           <thead class="dark:bg-base-100 bg-base-200 sticky top-0 border-0">
-            <tr>
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Moniker</th>
               <th>Domain</th>
               <th class="text-right">Relays</th>
@@ -331,17 +334,15 @@ function changePage(delta: number) {
         </table>
       </div>
 
-      <div class="flex items-center justify-between px-2 mt-2 text-sm">
-        <div>
-          Page {{ meta?.page || 1 }} / {{ meta?.totalPages || 1 }}
-        </div>
-        <div class="flex gap-2">
-          <button class="btn btn-xs" @click="changePage(-1)">Prev</button>
-          <button class="btn btn-xs" @click="changePage(1)">Next</button>
-        </div>
-      </div>
+      <TablePagination
+        :current-page="leaderboardCurrentPage"
+        :total-pages="leaderboardTotalPages"
+        :total-items="leaderboardTotalItems"
+        :items-per-page="leaderboardItemsPerPage"
+        item-label="validators"
+        :show-page-size="false"
+        @update:current-page="setLeaderboardPage"
+      />
     </div>
   </div>
 </template>
-
-

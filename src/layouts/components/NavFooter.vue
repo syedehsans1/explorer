@@ -534,7 +534,7 @@ onUnmounted(() => {
       <!-- Bottom Section -->
       <div class="flex flex-col-reverse lg:flex-row justify-between items-center gap-4 pt-6 lg:pt-8">
         <div class="flex flex-col lg:flex-row items-center lg:items-start gap-2 lg:gap-4">
-          <div class="flex items-center gap-2 text-gray-400 dark:text-gray-500 text-sm">
+          <div class="bottom-child">  
             <span>© <span id="currentYear"></span> Pocket Network. All rights reserved.</span><span>Powered by</span>
             <a href="https://stakenodes.org" target="_blank" class="flex items-center gap-1.5 hover:text-white dark:hover:text-white transition-colors duration-200">
               <img src="https://stakenodes.org/favicon.png" alt="Stakenodes" class="h-5 w-5"/>
@@ -1098,5 +1098,18 @@ footer a, footer button {
 .modal-enter-from > div,
 .modal-leave-to > div {
   transform: scale(0.95);
+}
+
+.bottom-child {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+@media (min-width: 768px) {
+  .bottom-child {
+    flex-direction: row;
+  }
 }
 </style>

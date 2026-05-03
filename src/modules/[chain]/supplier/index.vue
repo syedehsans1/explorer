@@ -3,6 +3,8 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useBlockchain, useFormatter } from '@/stores';
 import { PageRequest, type Pagination, type Supplier } from '@/types';
 import type { PaginatedBalances } from '@/types/bank'
+import { Icon } from '@iconify/vue'
+import TablePagination from '@/components/TablePagination.vue';
 const props = defineProps(['chain']);
 const blockchain = useBlockchain()
 
@@ -28,14 +30,14 @@ const totalPages = computed(() => {
 
 const totalSuppliers = computed(() => parseInt(pageResponse.value.total || '0'));
 
-// 🔹 Client-side sorting (applied after server returns page data)
-const sortedList = computed(() => {
-  return [...list.value].sort((a: any, b: any) => {
-    const aValue = parseInt(a.stake.amount || '0');
-    const bValue = parseInt(b.stake.amount || '0');
-    return bValue - aValue; // descending order
-  });
-});
+// Filter and sort state
+const statusFilter = ref<string>('all');
+const servicesFilter = ref<string>('all');
+const sortBy = ref<'stake' | 'services'>('stake');
+const sortOrder = ref<'desc' | 'asc'>('desc');
+
+// Server handles all filtering and sorting
+const sortedList = computed(() => list.value)
 
 // 🔹 Watch for page changes
 watch(currentPage, () => {
@@ -48,26 +50,67 @@ watch(itemsPerPage, () => {
   loadSuppliers();
 });
 
-// 🔹 Load data from RPC
+// 🔹 Watch for filter/sort changes — reset to page 1 and reload
+watch(statusFilter, () => { currentPage.value = 1; loadSuppliers(); });
+watch(servicesFilter, () => { currentPage.value = 1; loadSuppliers(); });
+watch(sortBy, () => { currentPage.value = 1; loadSuppliers(); });
+watch(sortOrder, () => { currentPage.value = 1; loadSuppliers(); });
+
+// 🔹 Load data from API (server-side filter, sort, pagination)
 async function loadSuppliers() {
-  if (!chainStore.rpc) {
-    await waitForRpc();
-  }
-  
   loading.value = true;
   try {
-    pageRequest.value.setPageSize(itemsPerPage.value);
-    pageRequest.value.setPage(currentPage.value);
-    pageRequest.value.count_total = true;
-    
-    const response = await chainStore.rpc.getSuppliers(pageRequest.value);
-    list.value = response.supplier || [];
-    pageResponse.value = response.pagination || {};
+    const params = new URLSearchParams();
+    params.append('chain', apiChainName.value);
+    params.append('page', currentPage.value.toString());
+    params.append('limit', itemsPerPage.value.toString());
+    params.append('sort_by', sortBy.value);
+    params.append('sort_order', sortOrder.value);
 
-    // 🔹 Trigger async, batched balance fetching (non-blocking for main loading state)
-    fetchBalancesInBatches().catch((e) => {
-      console.error('Error fetching supplier balances in batches:', e);
-    });
+    // Status filter — map UI values to API values
+    if (statusFilter.value !== 'all') {
+      params.append('status', statusFilter.value); // 'staked'|'unstaking'|'unstaked' — backend maps 'unstaking'→'unstake_requested'
+    }
+
+    // Services count filter
+    if (servicesFilter.value === 'high') {
+      params.append('min_services', '5');
+    } else if (servicesFilter.value === 'medium') {
+      params.append('min_services', '2');
+      params.append('max_services', '4');
+    } else if (servicesFilter.value === 'none') {
+      params.append('max_services', '0');
+    }
+
+    const apiRes = await fetch(`/api/v1/suppliers?${params.toString()}`);
+    const apiData = await apiRes.json();
+
+    if (apiRes.ok && apiData.data) {
+      list.value = apiData.data.map((item: any) => ({
+        operator_address: item.address,
+        owner_address: item.owner_address || '',
+        stake: {
+          denom: item.stake_denom || 'upokt',
+          amount: (item.staked_amount || '0').toString()
+        },
+        services: (item.service_ids || []).map((id: string) => ({ service_id: id, service_name: '' })),
+        status: item.status,
+        unstake_session_end_height: item.unstake_session_end_height,
+        balance: undefined
+      }));
+      pageResponse.value = {
+        total: apiData.meta?.total?.toString() || '0',
+        next_key: undefined
+      };
+      // 🔹 Fetch balances async without blocking render
+      fetchBalancesInBatches().catch((e) => {
+        console.error('Error fetching supplier balances in batches:', e);
+      });
+    } else {
+      console.error('Error loading suppliers from API:', apiData);
+      list.value = [];
+      pageResponse.value = {} as Pagination;
+    }
   } catch (error) {
     console.error('Error loading suppliers:', error);
     list.value = [];
@@ -127,25 +170,12 @@ async function fetchBalancesInBatches() {
   }
 }
 
-function nextPage() {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++;
-  }
+function setCurrentPage(page: number) {
+  currentPage.value = page;
 }
-function prevPage() {
-  if (currentPage.value > 1) {
-    currentPage.value--;
-  }
-}
-function goToFirst() {
-  if (currentPage.value !== 1) {
-    currentPage.value = 1;
-  }
-}
-function goToLast() {
-  if (currentPage.value !== totalPages.value && totalPages.value > 0) {
-    currentPage.value = totalPages.value;
-  }
+
+function setItemsPerPage(size: number) {
+  itemsPerPage.value = size;
 }
 
 // Network Stats
@@ -155,8 +185,8 @@ const networkStats = ref({
   suppliers: 0,
   gateways: 0,
   totalStakedTokens: 0,
-  unstakingCount24h: 0,      // <-- last 24h
-  totalUnstakingTokens: 0,
+  unstakingCount24h: 0,
+  totalUnstakingTokens24h: 0,
 })
 
 // Cache control
@@ -194,19 +224,41 @@ async function loadNetworkStats() {
 
     networkStats.value.suppliers = parseInt(suppliersData.pagination?.total || '0')
     
-    // Fetch from API for aggregate statistics
+    // Fetch from API for aggregate statistics (pass auth token if available)
     try {
+      const accessToken = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
+      const authHeaders: Record<string, string> = {}
+      if (accessToken) authHeaders['Authorization'] = `Bearer ${accessToken}`
+
       const apiUrl = `/api/v1/suppliers?chain=${apiChainName.value}&page=1&limit=1`
-      const apiRes = await fetch(apiUrl)
+      const apiRes = await fetch(apiUrl, { headers: authHeaders })
       const apiData = await apiRes.json()
-      
+
       if (apiRes.ok && apiData.meta) {
         networkStats.value.totalStakedTokens = apiData.meta.totalStakedTokens || 0
-        networkStats.value.unstakingCount24h = apiData.meta.unstakingCount24h || 0          // last 24h
-        networkStats.value.totalUnstakingTokens = apiData.meta.totalUnstakingTokens || 0
+        networkStats.value.unstakingCount24h = apiData.meta.unstakingCount24h || 0
       }
     } catch (apiError) {
       console.error('Error loading API stats:', apiError)
+    }
+
+    // Calculate 24h unstaking tokens: fetch unstake_requested suppliers, filter by last_seen within 24h
+    try {
+      const accessToken = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
+      const authHeaders: Record<string, string> = {}
+      if (accessToken) authHeaders['Authorization'] = `Bearer ${accessToken}`
+
+      const unstakingUrl = `/api/v1/suppliers?chain=${apiChainName.value}&page=1&limit=500&status=unstake_requested`
+      const unstakingRes = await fetch(unstakingUrl, { headers: authHeaders })
+      const unstakingData = await unstakingRes.json()
+      if (unstakingRes.ok && unstakingData.data) {
+        const yesterday = Date.now() - 24 * 60 * 60 * 1000
+        networkStats.value.totalUnstakingTokens24h = unstakingData.data
+          .filter((s: any) => s.last_seen && new Date(s.last_seen).getTime() > yesterday)
+          .reduce((sum: number, s: any) => sum + Number(s.staked_amount || 0), 0)
+      }
+    } catch (e) {
+      console.error('Error computing supplier 24h unstaking tokens:', e)
     }
     
     networkStatsCacheTime.value = now
@@ -222,23 +274,36 @@ onMounted(() => {
 });
 
 
-// add this helper for supplier status (Staked / Unstaked) with classes
+// add this helper for supplier status (Staked / Unstaked / Unstaking) with classes
 function getSupplierStatus(item: any) {
   if (!item) return { label: '-', classes: '' }
   const raw = (item.status || item.state || '').toString()
   const s = raw.toLowerCase()
-  // explicit indicators for unbonding/unstaking
-  if (s.includes('unbond') || s.includes('unstak') || item.unbonding_time || item.unbonding_height) {
+
+  if (s.includes('unstake_requested') || s.includes('unstaking') || s.includes('unbonding')) {
+    return { label: 'Unstaking', classes: 'bg-[#F59E0B]/10 text-[#F59E0B]' }
+  }
+
+  if (s.includes('unstaked') || s.includes('unbonded') || s.includes('inactive') || s.includes('tombstoned')) {
     return { label: 'Unstaked', classes: 'bg-[#E03834]/10 text-[#E03834]' }
   }
-  // treat as staked if status mentions bond/stake or stake amount > 0
-  const stakeAmt = Number(item.stake?.amount || '0')
-  if (s.includes('bond') || s.includes('stake') || stakeAmt > 0) {
+
+  if (s.includes('staked') || s.includes('bond') || s.includes('stake') || s.includes('active')) {
     return { label: 'Staked', classes: 'bg-[#60BC29]/10 text-[#60BC29]' }
   }
+
+  const stakeAmt = Number(item.stake?.amount || '0')
+  if (stakeAmt > 0) {
+    return { label: 'Staked', classes: 'bg-[#60BC29]/10 text-[#60BC29]' }
+  }
+
+  // Unstaked by fallback when stake is zero
+  if (stakeAmt === 0) {
+    return { label: 'Unstaked', classes: 'bg-[#E03834]/10 text-[#E03834]' }
+  }
+
   return { label: '-', classes: '' }
 }
-// ...existing code...
 
 // 🔹 Computed status
 const value = ref('stake');
@@ -270,19 +335,74 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
       </div>
       <div class="flex bg-[#ffffff] hover:bg-base-200 p-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <span>
-          <div class="text-xs text-[#64748B]">Unstaking Tokens</div>
-          <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens.toString() }) }}</div>
+          <div class="text-xs text-[#64748B]">Unstaking Tokens (24h)</div>
+          <div class="font-bold">{{ format.formatToken({ denom: 'upokt', amount: networkStats.totalUnstakingTokens24h.toString() }) }}</div>
         </span>
       </div>
     </div>
 
-    <!-- Scroll hataya gaya -->
+    <!-- Filter Bar -->
+    <div class="bg-[#ffffff] p-4 mb-4 rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+      <div class="flex items-center gap-2 flex-wrap">
+            <!-- Status Filter -->
+        <div class="flex items-center gap-1.5">
+          <Icon icon="mdi:check-circle-outline" class="text-base-content/60 text-sm" />
+          <select
+            v-model="statusFilter"
+            class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-28 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <option value="all">All</option>
+            <option value="staked">Staked</option>
+            <option value="unstaked">Unstaked</option>
+            <option value="unstaking">Unstaking</option>
+          </select>
+        </div>
+
+        <!-- Services Filter -->
+        <div class="flex items-center gap-1.5">
+          <Icon icon="mdi:layers-outline" class="text-base-content/60 text-sm" />
+          <select
+            v-model="servicesFilter"
+            class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-32 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <option value="all">All</option>
+            <option value="high">High (5+)</option>
+            <option value="medium">Medium (2-4)</option>
+            <option value="none">None (0)</option>
+          </select>
+        </div>
+
+        <!-- Sort By -->
+        <div class="flex items-center gap-1.5">
+          <Icon icon="mdi:sort" class="text-base-content/60 text-sm" />
+          <select
+            v-model="sortBy"
+            class="select select-bordered select-xs h-8 min-h-8 px-2 text-xs w-32 hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]"
+          >
+            <option value="stake">Stake</option>
+            <option value="services">Services</option>
+          </select>
+        </div>
+
+        <!-- Sort Order Toggle -->
+        <button
+          @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+          class="btn btn-xs h-8 min-h-8 px-2 gap-1"
+          :class="sortOrder === 'desc' ? 'btn-primary' : 'btn-ghost'"
+          :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'"
+        >
+          <Icon :icon="sortOrder === 'desc' ? 'mdi:sort-descending' : 'mdi:sort-ascending'" class="text-sm" />
+        </button>
+      </div>
+    </div>
+
     <div
       class="bg-[#ffffff] hover:bg-base-200 p-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto"
     >
+      <div class="overflow-auto" style="max-height:calc(100vh - 18rem)">
       <table class="table w-full table-compact rounded-xl">
         <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-          <tr class="text-sm font-semibold">
+          <tr class="text-sm font-semibold bg-base-200">
             <td>Rank</td>
             <td>Address</td>
             <td>Status</td>
@@ -388,67 +508,18 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
           </tr>
         </tbody>
       </table>
-
-      <!-- Pagination Bar -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <!-- Page Size Dropdown -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">Show:</span>
-          <select 
-            v-model="itemsPerPage" 
-            class="select select-bordered select-sm w-20"
-          >
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-          <span class="text-sm text-gray-600">per page</span>
-        </div>
-
-        <!-- Pagination Info and Controls -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalSuppliers) }} of {{ totalSuppliers }} suppliers
-          </span>
-          
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="prevPage"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage"
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast"
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>
       </div>
+
+      <TablePagination
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        :total-items="totalSuppliers"
+        :items-per-page="itemsPerPage"
+        item-label="suppliers"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setCurrentPage"
+        @update:items-per-page="setItemsPerPage"
+      />
     </div>
   </div>
 </template>
@@ -461,13 +532,3 @@ const statusText = computed(() => (value.value === 'stake' ? 'Staked' : 'Unstake
   }
 }
 </route>
-
-<style scoped>
-.page-btn:hover {
-  background-color: #e9ecef;
-}
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-</style>

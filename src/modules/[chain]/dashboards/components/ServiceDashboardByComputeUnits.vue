@@ -5,6 +5,7 @@ import { Icon } from '@iconify/vue';
 import ApexCharts from 'vue3-apexcharts';
 import { useBlockchain, useFormatter } from '@/stores';
 import { fetchNetworkAverages, fetchTopPerformers, calculateGrowthRates, calculateTrends, type NetworkAverages, type TopPerformersThreshold } from '../composables/useSupplierAnalytics';
+import TablePagination from '@/components/TablePagination.vue';
 
 const props = defineProps<{
   chain?: string;
@@ -204,6 +205,7 @@ interface TopServiceByPerformance {
 const loading = ref(false);
 const summaryStats = ref<SummaryStats | null>(null);
 const claims = ref<Claim[]>([]);
+const claimsTotalCount = ref(0);
 const rewardAnalytics = ref<RewardAnalytics[]>([]);
 const currentPage = ref(1);
 const currentPages = ref(1);
@@ -896,10 +898,12 @@ async function loadClaims() {
         compute_unit_efficiency: Number(item.compute_unit_efficiency) || 0,
         reward_per_relay: Number(item.reward_per_relay) || 0,
       }));
+      claimsTotalCount.value = data.meta?.total || claims.value.length;
       totalPages.value = data.meta?.totalPages || 0;
   } catch (error: any) {
     console.error('Error loading claims:', error);
     claims.value = [];
+    claimsTotalCount.value = 0;
     totalPages.value = 0;
   } finally {
     loading.value = false;
@@ -919,29 +923,35 @@ const rewardPaginatedTopServices = computed(() => {
   return topServicesByPerformance.value.slice(start, end);
 });
 
-function goToFirstReward() { rewardCurrentPage.value = 1; }
-function goToLastReward() { rewardCurrentPage.value = rewardTotalPages.value; }
-function goToPrevReward() { if (rewardCurrentPage.value > 1) rewardCurrentPage.value--; }
-function goToNextReward() { if (rewardCurrentPage.value < rewardTotalPages.value) rewardCurrentPage.value++; }
+function setServiceRewardsPage(page: number) {
+  serviceRewardsCurrentPage.value = page;
+}
 
+function setServiceRewardsItemsPerPage(size: number) {
+  serviceRewardsItemsPerPage.value = size;
+}
 
-function nextPage() { if (currentPage.value < totalPages.value) { currentPage.value++; loadClaims(); } }
-function prevPage() { if (currentPage.value > 1) { currentPage.value--; loadClaims(); } }
-function goToFirst() { currentPage.value = 1; loadClaims(); }
-function goToLast() { currentPage.value = totalPages.value; loadClaims(); }
+function setRewardPage(page: number) {
+  rewardCurrentPage.value = page;
+}
 
-function nPage() { if (currentPages.value < totalPages.value) { currentPages.value++; loadClaims(); } }
-function pPage() { if (currentPages.value > 1) { currentPages.value--; loadClaims(); } }
-function gTFirst() { currentPages.value = 1; loadClaims(); }
-function gTLast() { currentPages.value = totalPages.value; loadClaims(); }
+function setRewardItemsPerPage(size: number) {
+  rewardItemsPerPage.value = size;
+  rewardCurrentPage.value = 1;
+  loadTopServicesByPerformance();
+}
 
-const startItem = computed(() =>
-  rewardTotalItems.value === 0 ? 0 : (rewardCurrentPage.value - 1) * rewardItemsPerPage.value + 1
-);
+function setClaimsPage(page: number) {
+  if (currentPage.value === page) return;
+  currentPage.value = page;
+  loadClaims();
+}
 
-const endItem = computed(() =>
-  Math.min(rewardCurrentPage.value * rewardItemsPerPage.value, rewardTotalItems.value)
-);
+function setClaimsItemsPerPage(size: number) {
+  itemsPerPage.value = size;
+  currentPage.value = 1;
+  loadClaims();
+}
 
 
 async function loadTopServicesByComputeUnits() {
@@ -949,16 +959,21 @@ async function loadTopServicesByComputeUnits() {
   try {
     const params = new URLSearchParams();
     params.append('limit', topServicesLimit.value.toString());
-    params.append('days', topServicesDays.value.toString());
     params.append('chain', apiChainName.value);
-    // Add filter support
+    // Explicit date range from parent takes priority over internal days selector
+    if (props.startDate && props.endDate) {
+      params.append('start_date', props.startDate);
+      params.append('end_date', props.endDate);
+    } else {
+      params.append('days', topServicesDays.value.toString());
+    }
     const supplierFilter = props.filters?.supplier_address;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
-    
+
     const data = await fetchApi('/api/v1/services/top-by-compute-units', params);
-      topServicesByComputeUnits.value = data.data || [];
-      updateTopServicesChart();
+    topServicesByComputeUnits.value = data.data || [];
+    updateTopServicesChart();
   } catch (error: any) {
     console.error('Error loading top services by compute units:', error);
     topServicesByComputeUnits.value = [];
@@ -971,19 +986,22 @@ async function loadTopServicesByPerformance() {
   loadingPerformanceTable.value = true;
   try {
     const params = new URLSearchParams();
-    // params.append('limit', itemsPerPages.value.toString());
     params.append('limit', rewardItemsPerPage.value.toString());
-    params.append('days', performanceDays.value.toString());
     params.append('chain', apiChainName.value);
-    // Add filter support
+    // Explicit date range from parent takes priority over internal days selector
+    if (props.startDate && props.endDate) {
+      params.append('start_date', props.startDate);
+      params.append('end_date', props.endDate);
+    } else {
+      params.append('days', performanceDays.value.toString());
+    }
     const supplierFilter = props.filters?.supplier_address;
     if (supplierFilter) params.append('supplier_address', supplierFilter);
     if (props.filters?.owner_address) params.append('owner_address', props.filters.owner_address);
-    
+
     const data = await fetchApi('/api/v1/services/top-by-performance', params);
-      topServicesByPerformance.value = data.data || [];
-      totalComputeUnits.value = data.total_compute_units || 0;
-    // Update the chart data based on the new top services
+    topServicesByPerformance.value = data.data || [];
+    totalComputeUnits.value = data.total_compute_units || 0;
     updateTopServicesChart();
   } catch (error: any) {
     console.error('Error loading top services by performance:', error);
@@ -1015,8 +1033,8 @@ async function loadRewardShareData() {
 
     // Get supplier addresses from filters (may be comma-separated)
     const supplierFilter = props.filters?.supplier_address;
-    if (!supplierFilter) {
-      // No supplier filter - clear all data
+    if (!supplierFilter && !props.filters?.owner_address) {
+      // No filter at all - clear all data
       rewardShareDistribution.value = [];
       topRewardEarners.value = [];
       rewardEfficiencyAnalysis.value = [];
@@ -1123,47 +1141,19 @@ async function loadRewardShareData() {
         }
       });
     } else {
-      // Group by owner address
-      const ownerMap = new Map<string, {
-        rewards: number;
-        suppliers: Set<string>;
-        relays: number;
-        efficiency: number;
-        compute_units: number;
-      }>();
-      
+      // Specific operators were selected — show per-operator data so each operator's
+      // share is visible individually (single operator = 1 slice, multiple = N slices)
       supplierMap.forEach((data, supplier) => {
-        const owner = data.owner || supplier;
-        const existing = ownerMap.get(owner) || {
-          rewards: 0,
-          suppliers: new Set(),
-          relays: 0,
-          efficiency: 0,
-          compute_units: 0
-        };
-        existing.rewards += data.rewards;
-        existing.suppliers.add(supplier);
-        existing.relays += data.relays;
-        existing.compute_units += data.compute_units;
-        ownerMap.set(owner, existing);
-      });
-
-      ownerMap.forEach((data, owner) => {
-        // Calculate weighted average efficiency
-        const avgEfficiency = supplierMap.size > 0
-          ? Array.from(data.suppliers).reduce((sum, s) => sum + (supplierMap.get(s)?.efficiency || 0), 0) / data.suppliers.size
-          : 0;
-
         rewardShareEntries.push({
-          account: owner,
-          moniker: null, // Supplier metadata not available in list endpoint
+          account: supplier,
+          moniker: data.supplier?.moniker || null,
           total_rewards: data.rewards / 1000000,
           share_percent: totalRewardsUpokt > 0 ? (data.rewards / totalRewardsUpokt) * 100 : 0,
           total_relays: data.relays,
-          efficiency: avgEfficiency,
+          efficiency: data.efficiency,
           compute_units: data.compute_units,
-          nodes: data.suppliers.size,
-          status: null // Supplier metadata not available in list endpoint
+          nodes: 1,
+          status: data.supplier?.status || null
         });
       });
     }
@@ -1444,70 +1434,70 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
 
     <!-- Top Row: Enhanced KPI Boxes -->
     <div v-if="summaryStats && (props.filters?.supplier_address || props.filters?.owner_address)" class="mb-3">
-      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+      <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:file-document-multiple" class="text-sm" />
             Claims
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.total_claims)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.total_claims)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-secondary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-secondary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:account-group" class="text-sm" />
             Suppliers
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.unique_suppliers)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_suppliers)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:application" class="text-sm" />
             Applications
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.unique_applications)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_applications)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:server-network" class="text-sm" />
             Services
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(parseInt(summaryStats.unique_services)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(parseInt(summaryStats.unique_services)) }}</div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:network" class="text-sm" />
             Total Relays
           </div>
-          <div class="text-xl font-bold">{{ formatNumber(safeInt(summaryStats?.total_relays)) }}</div>
+          <div class="text-sm font-bold truncate">{{ formatNumber(safeInt(summaryStats?.total_relays)) }}</div>
         </div>
-        <div 
-          class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg"
+        <div
+          class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg"
           :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'border-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'border-warning' : 'border-error'">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:gauge" class="text-sm" />
             Avg Efficiency
           </div>
-          <div class="text-xl font-bold" :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'text-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'text-warning' : 'text-error'">
+          <div class="text-sm font-bold truncate" :class="parseFloat(summaryStats.avg_efficiency_percent) >= 95 ? 'text-success' : parseFloat(summaryStats.avg_efficiency_percent) >= 80 ? 'text-warning' : 'text-error'">
             {{ safePercent(summaryStats?.avg_efficiency_percent) }}
           </div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:calculator" class="text-sm" />
             Compute Units
           </div>
-          <div class="text-xl font-bold">{{ formatComputeUnits(safeInt(summaryStats?.total_claimed_compute_units)) }}</div>
-          <div class="text-xs text-secondary mt-1">
+          <div class="text-sm font-bold truncate">{{ formatComputeUnits(safeInt(summaryStats?.total_claimed_compute_units)) }}</div>
+          <div class="text-xs text-secondary mt-1 truncate">
             Est: {{ formatComputeUnits(safeInt(summaryStats?.total_estimated_compute_units)) }}
           </div>
         </div>
-        <div class="bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
+        <div class="min-w-0 bg-[#ffffff] rounded-lg p-3 hover:bg-base-200 bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] border-l-4 border-primary shadow-md hover:shadow-lg">
           <div class="text-xs text-secondary mb-1 flex items-center gap-1">
             <Icon icon="mdi:currency-usd" class="text-sm" />
             Total Rewards
           </div>
-          <div class="text-xl font-bold text-success">{{ formatCompactAmount(summaryStats.total_rewards_upokt) }} POKT</div>
-          <div class="text-xs text-secondary mt-1">
+          <div class="text-sm font-bold text-success truncate">{{ formatCompactAmount(summaryStats.total_rewards_upokt) }} POKT</div>
+          <div class="text-xs text-secondary mt-1 truncate">
             Avg/Relay: {{ format.formatToken({ denom: 'upokt', amount: String(summaryStats.avg_reward_per_relay || '0') }) }}
           </div>
         </div>
@@ -1515,7 +1505,9 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
     </div>
 
     <!-- Service Rewards Breakdown - Show in Summary tab -->
-    <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
+    <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" 
+      class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto"
+    >
       <div class="flex items-center justify-between mb-3 ml-4 mr-4">
         <div class="text-base font-semibold text-main flex items-center gap-2">
           <Icon icon="mdi:chart-pie" class="text-lg" />
@@ -1532,10 +1524,8 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </div>
         <table v-else class="table w-full table-compact">
           <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Service</th>
-              <th>Operator Address</th>
-              <th>Application Address</th>
               <th>Total Rewards</th>
               <th>Total Relays</th>
               <th>Avg Reward/Relay</th>
@@ -1548,22 +1538,6 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             <tr v-for="service in paginatedServiceRewards" :key="service.service_id" class="hover:bg-base-200 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
               <td class="dark:bg-base-200 bg-white">
                 <span class="badge badge-primary h-8 text-xs leading-4 px-2">{{ service.service_id }}</span>
-              </td>
-              <td class="dark:bg-base-200 bg-white">
-                <RouterLink
-                  :to="`/${chainStore.chainName}/account/${service.supplier_operator_address}`"
-                  class="text-sm text-[#09279F] dark:invert font-medium hover:underline"
-                >
-                  {{ service.supplier_operator_address.substring(0, 12) }}...{{ service.supplier_operator_address.substring(service.supplier_operator_address.length - 7) }}
-                </RouterLink>
-              </td>
-              <td class="dark:bg-base-200 bg-white">
-                <RouterLink
-                  :to="`/${chainStore.chainName}/account/${service.application_address}`"
-                  class="text-sm text-[#09279F] dark:invert font-medium hover:underline"
-                >
-                  {{ service.application_address.substring(0, 12) }}...{{ service.application_address.substring(service.application_address.length - 7) }}
-                </RouterLink>
               </td>
               <td class="dark:bg-base-200 bg-white font-semibold text-success">
                 {{ format.formatToken({ denom: 'upokt', amount: String(service.total_rewards_upokt) }) }}
@@ -1593,59 +1567,16 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-        <div class="flex items-center gap-2">
-          <span class="text-xs text-secondary">Show:</span>
-          <select v-model="serviceRewardsItemsPerPage" class="select select-bordered select-xs w-20">
-            <option :value="10">10</option>
-            <option :value="25">25</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((serviceRewardsCurrentPage - 1) * serviceRewardsItemsPerPage) + 1 }} to {{ Math.min(serviceRewardsCurrentPage * serviceRewardsItemsPerPage, serviceRewardsTotalCount) }} of {{ serviceRewardsTotalCount }} rewards
-          </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage = 1"
-              :disabled="serviceRewardsCurrentPage === 1 || serviceRewardsTotalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage--"
-              :disabled="serviceRewardsCurrentPage === 1 || serviceRewardsTotalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ serviceRewardsCurrentPage }} of {{ serviceRewardsTotalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage++"
-              :disabled="serviceRewardsCurrentPage === serviceRewardsTotalPages || serviceRewardsTotalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="serviceRewardsCurrentPage = serviceRewardsTotalPages"
-              :disabled="serviceRewardsCurrentPage === serviceRewardsTotalPages || serviceRewardsTotalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>  
-      </div>  
+      <TablePagination
+        :current-page="serviceRewardsCurrentPage"
+        :total-pages="serviceRewardsTotalPages"
+        :total-items="serviceRewardsTotalCount"
+        :items-per-page="serviceRewardsItemsPerPage"
+        item-label="rewards"
+        :page-size-options="[10, 25, 50, 100]"
+        @update:current-page="setServiceRewardsPage"
+        @update:items-per-page="setServiceRewardsItemsPerPage"
+      />
 
     </div>
 
@@ -1684,7 +1615,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </div>
         <table v-else class="table w-full table-compact">
           <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th>Rank</th>
               <th>Service</th>
               <th>Compute Units</th>
@@ -1727,59 +1658,16 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         </table>
       </div>
 
-      <!-- Pagination -->
-      <div class="flex justify-between items-center gap-4 my-6 px-6">
-         <div class="flex items-center justify-end gap-2">
-            <span class="text-xs text-secondary"> Limit:</span>
-            <select v-model="itemsPerPages" @change="loadTopServicesByPerformance()"  class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-              <option :value="30">30</option>
-              <option :value="50">50</option>
-            </select>
-          </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((rewardCurrentPage - 1) * rewardItemsPerPage) + 1 }} to {{ Math.min(rewardCurrentPage * rewardItemsPerPage, rewardTotalItems) }} of {{ rewardTotalPages }} rewards
-          </span>
-
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage = 1"
-              :disabled="rewardCurrentPage === 1 || rewardTotalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage--"
-              :disabled="rewardCurrentPage === 1 || rewardTotalPages === 0"
-            >
-              &lt;
-            </button>
-
-            <span class="text-xs px-2">
-              Page {{ rewardCurrentPage }} of {{ rewardTotalPages }}
-            </span>
-
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage++"
-              :disabled="rewardCurrentPage === rewardTotalPages || rewardTotalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="rewardCurrentPage = rewardTotalPages"
-              :disabled="rewardCurrentPage === rewardTotalPages || rewardTotalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>  
-      </div> 
+      <TablePagination
+        :current-page="rewardCurrentPage"
+        :total-pages="rewardTotalPages"
+        :total-items="rewardTotalItems"
+        :items-per-page="rewardItemsPerPage"
+        item-label="rewards"
+        :page-size-options="[10, 20, 30, 50]"
+        @update:current-page="setRewardPage"
+        @update:items-per-page="setRewardItemsPerPage"
+      />
     </div>
     
 
@@ -1790,19 +1678,11 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
       <div v-if="(!props.tabView || props.tabView === 'summary') && (props.filters?.supplier_address || props.filters?.owner_address)" class="bg-[#ffffff] hover:bg-base-200 pt-2 mb-3 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
         <div class="flex items-center justify-between mb-2 ml-3 mr-3">
           <div class="text-sm font-semibold text-main">Claims</div>
-          <div class="flex items-center gap-1">
-            <span class="text-xs text-secondary">Show:</span>
-            <select v-model="itemsPerPage" @change="loadClaims()" class="select select-bordered select-xs w-full text-xs dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
-              <option :value="25">25</option>
-              <option :value="50">50</option>
-              <option :value="100">100</option>
-            </select>
-          </div>
         </div>
         <div class="bg-base-200 rounded-md overflow-auto h-[35vh]">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Tx Hash</th>
                 <th>Service</th>
                 <th>Supplier</th>
@@ -1846,44 +1726,16 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
             </tbody>
           </table>
         </div>
-        <div class="flex justify-between items-center gap-4 my-6 px-2">
-          <span class="text-sm text-gray-600">
-            Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, claims.length) }} of {{ claims.length }} claims
-          </span>
-          <div class="flex items-center gap-1">
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToFirst"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              First
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="prevPage"
-              :disabled="currentPage === 1 || totalPages === 0"
-            >
-              &lt;
-            </button>
-            <span class="text-xs px-2">
-              Page {{ currentPage }} of {{ totalPages }}
-            </span>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="nextPage"
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              &gt;
-            </button>
-            <button
-              class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
-              @click="goToLast"
-              :disabled="currentPage === totalPages || totalPages === 0"
-            >
-              Last
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :total-items="claimsTotalCount"
+          :items-per-page="itemsPerPage"
+          item-label="claims"
+          :page-size-options="[25, 50, 100]"
+          @update:current-page="setClaimsPage"
+          @update:items-per-page="setClaimsItemsPerPage"
+        />
       </div>
 
       <!-- Right Column: Services Chart -->
@@ -1916,20 +1768,20 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div v-if="loadingTopServices" class="flex justify-center items-center h-64">
             <div class="loading loading-spinner loading-sm"></div>
           </div>
-          <div v-else-if="topServicesByComputeUnits.length === 0" class="flex justify-center items-center h-64 text-gray-500 text-xs">
+          <div v-else-if="topServicesByPerformance.length === 0" class="flex justify-center items-center h-64 text-gray-500 text-xs">
             No data
           </div>
           <div v-else class="h-[35vh]">
-            <ApexCharts 
-              :type="topServicesChartType" 
-              height="360" 
-              :options="topServicesChartOptions" 
+            <ApexCharts
+              :type="topServicesChartType"
+              height="360"
+              :options="topServicesChartOptions"
               :series="topServicesChartSeries"
               :key="`topServices-${topServicesChartType}`"
             />
           </div>
           <!-- Chart Type Selector - Bottom Right -->
-          <div v-if="!loadingTopServices && topServicesByComputeUnits.length > 0" class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
+          <div v-if="!loadingTopServices && topServicesByPerformance.length > 0" class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
             <button
               @click="topServicesChartType = 'bar'"
               :class="[
@@ -1992,7 +1844,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         <div v-else class="bg-base-200 rounded-md overflow-auto h-[600px]">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Rank</th>
                 <th>Service</th>
                 <th>Compute Units</th>
@@ -2068,7 +1920,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
         <div v-else class="bg-base-200 rounded-md overflow-auto h-[40vh]">
           <table class="table w-full table-compact">
             <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th>Service ID</th>
                 <th>Compute Units</th>
                 <th>Claims</th>
@@ -2143,7 +1995,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div class="bg-base-200 rounded-md overflow-auto h-[40vh]">
             <table class="table w-full table-compact">
               <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-                <tr class="border-b-[0px] text-sm font-semibold">
+                <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                   <th>Rank</th>
                   <th>Validator</th>
                   <th>Rewards (POKT)</th>
@@ -2214,7 +2066,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div class="bg-base-200 rounded-md overflow-auto h-[40vh]">
             <table class="table w-full table-compact">
               <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-                <tr class="border-b-[0px] text-sm font-semibold">
+                <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                   <th>Validator</th>
                   <th>Rewards/CU</th>
                   <th>Reward/Relay</th>
@@ -2268,7 +2120,7 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
           <div class="bg-base-200 rounded-md overflow-auto h-[40vh]">
             <table class="table w-full table-compact">
               <thead class="dark:bg-[rgba(255,255,255,.03);] bg-base-200 sticky top-0 border-0">
-                <tr class="border-b-[0px] text-sm font-semibold">
+                <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                   <th>Validator</th>
                   <th>Total Rewards</th>
                   <th>Services</th>
@@ -2409,13 +2261,4 @@ function perfGoLast() { if (perfCurrentPage.value !== perfTotalPages.value && pe
   .table { font-size: 0.75rem; }
   th, td { padding: 0.5rem; }
 }
-.page-btn:hover {
-  background-color: #e9ecef;
-}
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 </style>
-
-

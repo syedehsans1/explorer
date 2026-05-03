@@ -15,6 +15,7 @@ import { computed, ref } from '@vue/reactivity';
 import { onMounted, watch, onUnmounted, watchEffect } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useSEO } from '@/composables/useSEO';
+import TablePagination from '@/components/TablePagination.vue';
 
 import type {
   AuthAccount,
@@ -106,6 +107,14 @@ const typeTabMap: Record<string, string[]> = {
     'MsgUnstakeGateway (gateway)'
   ]
 };
+
+const UPOKT_MULTIPLIER = 1_000_000
+
+function parseValidAmount(val: any): number | undefined {
+  if (val === undefined || val === null || val === '') return undefined
+  const n = Number(val)
+  return isNaN(n) ? undefined : n
+}
 
 let txDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -475,37 +484,38 @@ async function loadTransactions(address: string) {
     // Add type filter based on selected tab
     const selectedTypes = typeTabMap[selectedTypeTab.value];
     if (selectedTypes.length > 0) {
-      // if the account is an application, add the MsgStakeApplication type
       if (selectedTypeTab.value === 'staking') {
+        // Filter by stake+unstake types specific to the account entity type
         if (applications.value.address === address) {
-          filters.type = 'MsgStakeApplication (application)';
+          filters.types = ['MsgStakeApplication (application)', 'MsgUnstakeApplication (application)'];
         } else if (gateways.value.address === address) {
-          filters.type = 'MsgStakeGateway (gateway)';
+          filters.types = ['MsgStakeGateway (gateway)', 'MsgUnstakeGateway (gateway)'];
         } else if (suppliers.value.operator_address === address) {
-          filters.type = 'MsgStakeSupplier (supplier)';
+          filters.types = ['MsgStakeSupplier (supplier)', 'MsgUnstakeSupplier (supplier)'];
+        } else {
+          // Regular wallet: show all staking-related types
+          filters.types = selectedTypes;
         }
-      } else {
+      } else if (selectedTypes.length === 1) {
         filters.type = selectedTypes[0];
+      } else {
+        filters.types = selectedTypes;
       }
     }
 
     if (txStatusFilter.value) {
-      filters.status = txStatusFilter.value == 'success' ? "true" : "false";
+      filters.status = txStatusFilter.value; // 'success' or 'failed' — backend maps correctly
     }
     if (txStartDate.value) {
-      // Convert datetime-local to ISO 8601
       filters.start_date = new Date(txStartDate.value).toISOString();
     }
     if (txEndDate.value) {
-      // Convert datetime-local to ISO 8601
       filters.end_date = new Date(txEndDate.value).toISOString();
     }
-    if (txMinAmount.value !== undefined) {
-      filters.min_amount = txMinAmount.value;
-    }
-    if (txMaxAmount.value !== undefined) {
-      filters.max_amount = txMaxAmount.value;
-    }
+    const minAmt = parseValidAmount(txMinAmount.value)
+    const maxAmt = parseValidAmount(txMaxAmount.value)
+    if (minAmt !== undefined) filters.min_amount = Math.round(minAmt * UPOKT_MULTIPLIER)
+    if (maxAmt !== undefined) filters.max_amount = Math.round(maxAmt * UPOKT_MULTIPLIER)
 
     const data = await fetchTransactionsWithFallback(filters, {
       chainStore: blockchain,
@@ -541,11 +551,22 @@ watch([selectedTypeTab, txStatusFilter, txStartDate, txEndDate, txMinAmount, txM
   }
 });
 
-watch([currentTxPage, txItemsPerPage], () => {
-  if (props.address) {
-    loadTransactions(props.address);
-  }
+watch(currentTxPage, () => {
+  if (props.address) loadTransactions(props.address);
 });
+
+watch(txItemsPerPage, () => {
+  currentTxPage.value = 1;
+  if (props.address) loadTransactions(props.address);
+});
+
+function setCurrentTxPage(page: number) {
+  currentTxPage.value = page;
+}
+
+function setTxItemsPerPage(size: number) {
+  txItemsPerPage.value = size;
+}
 
 function updateEvent() {
   loadAccount(props.address);
@@ -920,18 +941,25 @@ async function loadAddressPerformance(address: string) {
 }
 </script>
 <template>
-<div class="pt-[6.5rem]">
+<div class="pt-[6.5rem] overflow-x-hidden">
   <div v-if="account">
       <!-- address -->
-      <div class="bg-[#ffffff] hover:bg-base-200 text-2xl w-full px-4 py-4 my-4 font-bold text-[#000000] dark:text-[#ffffff] rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
-        <div class="flex items-center">
-          <!-- content -->
-          <div class="flex items-center flex-1 space-x-3">
-            <h2 class="text-2xl card-title">{{ $t('account.address') }}</h2>
-            <span class="text-[16px] truncate flex items-center" style="width:max-content"> {{ address }} {{ "&nbsp;&nbsp;&nbsp;" }}
-              <span class="float-right cursor-pointer" style="width:max-content" v-if="copied">&nbsp;&nbsp;Copied!</span>
-              <Icon class="float-right cursor-pointer" icon="ic:round-content-copy" @click="copy(address)" />
-            </span>
+      <div class="bg-[#ffffff] hover:bg-base-200 w-full px-3 sm:px-4 py-3 sm:py-4 my-4 font-bold text-[#000000] dark:text-[#ffffff] rounded-xl shadow-md bg-gradient-to-b dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+        <div class="flex flex-col gap-2 sm:gap-3 min-w-0">
+          <h2 class="text-2xl card-title leading-tight">{{ $t('account.address') }}</h2>
+          <div class="flex items-start gap-2 sm:gap-3 min-w-0">
+            <span class="text-sm sm:text-base font-mono font-semibold text-[#171C1F] dark:text-[#E6EEF9] break-all min-w-0">{{ address }}</span>
+            <div class="shrink-0 flex items-center gap-2">
+              <span class="text-xs font-medium text-[#60BC29] dark:text-[#7bd87b]" v-if="copied">Copied!</span>
+              <button
+                type="button"
+                class="p-1 rounded-md hover:bg-base-200 dark:hover:bg-white/10 transition-colors"
+                @click="copy(address)"
+                aria-label="Copy address"
+              >
+                <Icon class="cursor-pointer" icon="ic:round-content-copy" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -943,7 +971,7 @@ async function loadAddressPerformance(address: string) {
       <div class="flex flex-row overflow-auto gap-8 w-full">
         <div class="bg-base-200 mb-4 rounded-xl hover:bg-base-300 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] shadow-md bg-gradient-to-b border border-[#FFB206] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
           <div class="flex justify-between text-main mb-4 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] bg-base-200  px-4 py-2 w-full">
-            <h2 class="text-2xl font-semibold text-[#171C1F] dark:text-[#ffffff;]">{{ $t('account.assets') }}</h2>
+            <h2 class="text-2xl font-semibold text-[#171C1F] dark:text-[#ffffff]">{{ $t('account.assets') }}</h2>
             <div v-if="totalUsdValue !== null" class="flex items-center">
               <span class="text-sm text-[#64748B] dark:text-gray-400 mr-2">Total Portfolio Value:</span>
               <span class="text-lg font-bold text-[#171C1F] dark:text-[#ffffff]">
@@ -986,7 +1014,7 @@ async function loadAddressPerformance(address: string) {
                     </div>
                   </div>
                   <div class="flex flex-col">
-                    <h2 class="text-[#64748B;] text-sm px-4 mb-2 mt-10">Amount</h2>
+                    <h2 class="text-[#64748B] text-sm px-4 mb-2 mt-10">Amount</h2>
                     <div class="flex flex-col items-start px-4 mb-2 gap-4">
                       <!-- Items from donutData to match order -->
                       <div v-for="(item, index) in donutData" :key="`item-${index}`"
@@ -1001,7 +1029,7 @@ async function loadAddressPerformance(address: string) {
                     </div>
                   </div>
                   <div class="flex flex-col">
-                    <h2 class="text-[#64748B;] text-sm px-4 mb-2 mt-10">Percentage</h2>
+                    <h2 class="text-[#64748B] text-sm px-4 mb-2 mt-10">Percentage</h2>
                     <div class="flex flex-col items-start px-4 mb-2 gap-4">
                       <!-- Items from donutData to match order -->
                       <div v-for="(item, index) in donutData" :key="`item-${index}`"
@@ -1123,7 +1151,7 @@ async function loadAddressPerformance(address: string) {
       <div class="w-full">
         <div class="bg-base-200 mb-4 rounded-xl hover:bg-base-300 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] shadow-md bg-gradient-to-b border border-[#FFB206] dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-x-auto">
           <div class="flex flex-col sm:flex-row justify-between text-main mb-4 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] bg-base-200 px-4 py-2 w-full">
-            <h2 class="text-2xl font-semibold text-[#171C1F] dark:text-[#ffffff;]">{{ $t('account.assets') }}</h2>
+            <h2 class="text-2xl font-semibold text-[#171C1F] dark:text-[#ffffff]">{{ $t('account.assets') }}</h2>
             <div v-if="totalUsdValue !== null" class="flex items-center mt-2 sm:mt-0">
               <span class="text-sm text-[#64748B] dark:text-gray-400 mr-2">Total Portfolio Value:</span>
               <span class="text-lg font-bold text-[#171C1F] dark:text-[#ffffff]">
@@ -1166,7 +1194,7 @@ async function loadAddressPerformance(address: string) {
                     </div>
                   </div>
                   <div class="flex flex-col">
-                    <h2 class="text-[#64748B;] text-sm px-4 mb-2 mt-10">Amount</h2>
+                    <h2 class="text-[#64748B] text-sm px-4 mb-2 mt-10">Amount</h2>
                     <div class="flex flex-col items-start px-4 mb-2 gap-4">
                       <!-- Items from donutData to match order -->
                       <div v-for="(item, index) in donutData" :key="`item-${index}`"
@@ -1181,7 +1209,7 @@ async function loadAddressPerformance(address: string) {
                     </div>
                   </div>
                   <div class="flex flex-col">
-                    <h2 class="text-[#64748B;] text-sm px-4 mb-2 mt-10">Percentage</h2>
+                    <h2 class="text-[#64748B] text-sm px-4 mb-2 mt-10">Percentage</h2>
                     <div class="flex flex-col items-start px-4 mb-2 gap-4">
                       <!-- Items from donutData to match order -->
                       <div v-for="(item, index) in donutData" :key="`item-${index}`"
@@ -1307,7 +1335,7 @@ async function loadAddressPerformance(address: string) {
         <div class="services-table-wrapper services-table-scroll rounded-xl">
           <table class="table table-compact w-full">
             <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-              <tr class="border-b-[0px] text-sm font-semibold">
+              <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 hover:bg-base-300">Service ID</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 hover:bg-base-300">JSON_RPC URL</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 hover:bg-base-300">WEBSOCKET URL</th>
@@ -1420,7 +1448,7 @@ async function loadAddressPerformance(address: string) {
     <div class="overflow-x-auto">
       <table class="table text-sm w-full">
         <thead class="bg-base-200">
-          <tr class="text-sm font-semibold">
+          <tr class="bg-base-200 text-sm font-semibold">
             <th class="py-3 bg-base-300">{{ $t('account.creation_height') }}</th>
             <th class="py-3 bg-base-300">{{ $t('account.initial_balance') }}</th>
             <th class="py-3 bg-base-300">{{ $t('account.balance') }}</th>
@@ -1579,7 +1607,7 @@ async function loadAddressPerformance(address: string) {
       <div class="services-table-wrapper services-table-scroll rounded-xl">
         <table class="table table-compact w-full">
           <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-            <tr class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 border-b-[0px] text-sm font-semibold">
+            <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
               <th class="">Day</th>
               <th class="">Rewards (POKT)</th>
               <th class="">Relays</th>
@@ -1775,13 +1803,13 @@ async function loadAddressPerformance(address: string) {
     <div class="services-table-wrapper services-table-scroll bg-base-200 px-0.5 pt-0.5 pb-4 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg overflow-auto">
       <table class="table table-compact w-full">
         <thead class="bg-base-200 dark:bg-[rgba(255,255,255,.03)] sticky top-0 border-0">
-          <tr class="border-b-[0px] text-sm font-semibold">
-            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.height') }}</th>
-            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.hash') }}</th>
-            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.type') }}</th>
-            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.amount') }}</th>
-            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('tx.fee') }}</th>
-            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)">{{ $t('account.time') }}</th>
+          <tr class="bg-base-200 border-b-[0px] text-sm font-semibold">
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)]">{{ $t('account.height') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)]">{{ $t('account.hash') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)]">{{ $t('account.type') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)]">{{ $t('account.amount') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)]">{{ $t('tx.fee') }}</th>
+            <th class="bg-base-200 dark:bg-[rgba(255,255,255,.03)]">{{ $t('account.time') }}</th>
           </tr>
         </thead>
         <tbody class="bg-base-100 relative">
@@ -1830,74 +1858,16 @@ async function loadAddressPerformance(address: string) {
       </table>
     </div>
 
-    <!-- Pagination -->
-    <div class="flex flex-col md:!flex-row md:justify-between md:items-center gap-4 my-6 px-3 md:px-6">
-      <!-- Page Size Selector -->
-      <div class="flex items-center gap-2 justify-center md:justify-start">
-        <span class="text-sm text-gray-600">Show:</span>
-        <select 
-          v-model="txItemsPerPage" 
-          class="select select-bordered select-sm w-20"
-        >
-          <option :value="10">10</option>
-          <option :value="25">25</option>
-          <option :value="50">50</option>
-          <option :value="100">100</option>
-        </select>
-        <span class="text-sm text-gray-600 hidden sm:inline">per page</span>
-      </div>
-
-      <!-- Pagination Info and Controls -->
-      <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-2">
-        <!-- Info Text - Hidden on mobile, shown on tablet+ -->
-        <span class="text-sm text-gray-600 hidden md:inline">
-          Showing {{ ((currentTxPage - 1) * txItemsPerPage) + 1 }} to {{ Math.min(currentTxPage * txItemsPerPage, totalTxCount) }} of {{ totalTxCount }} transactions
-        </span>
-        
-        <!-- Compact Info for Mobile -->
-        <span class="text-xs text-gray-600 md:hidden text-center">
-          {{ totalTxCount }} total
-        </span>
-        
-        <!-- Pagination Buttons -->
-        <div class="flex items-center gap-1">
-          <!-- First/Last buttons - Hidden on mobile -->
-          <button
-            class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px] hidden sm:inline-block" 
-            @click="currentTxPage = 1"
-            :disabled="currentTxPage === 1 || totalTxPages === 0"
-          >
-            First
-          </button>
-          <button
-            class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[8px] sm:px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-            @click="currentTxPage--"
-            :disabled="currentTxPage === 1 || totalTxPages === 0"
-          >
-            &lt;
-          </button>
-
-          <span class="text-xs px-2 whitespace-nowrap">
-            Page {{ currentTxPage }} of {{ totalTxPages }}
-          </span>
-
-          <button
-            class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[8px] sm:px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-            @click="currentTxPage++"
-            :disabled="currentTxPage === totalTxPages || totalTxPages === 0"
-          >
-            &gt;
-          </button>
-          <button
-            class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px] hidden sm:inline-block" 
-            @click="currentTxPage = totalTxPages"
-            :disabled="currentTxPage === totalTxPages || totalTxPages === 0"
-          >
-            Last
-          </button>
-        </div>
-      </div>
-    </div>
+    <TablePagination
+      :current-page="currentTxPage"
+      :total-pages="totalTxPages"
+      :total-items="totalTxCount"
+      :items-per-page="txItemsPerPage"
+      item-label="transactions"
+      :page-size-options="[10, 25, 50, 100]"
+      @update:current-page="setCurrentTxPage"
+      @update:items-per-page="setTxItemsPerPage"
+    />
   </div>
 
   <!-- Performance / Usage (Supplier or Application) -->

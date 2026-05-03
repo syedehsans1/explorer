@@ -2,10 +2,10 @@
     "chain_name": "pocket-mainnet",
     "registry_name": "Mainnet",
     "api": [
-        {"provider": "Pocket-Mainnet", "address": "https://pocket-mainnet-api.pn.stakenodes.org"}
+        {"provider": "Pocket-Mainnet", "address": "https://sauron-api.infra.pocket.network"}
     ],
     "rpc": [
-        {"provider": "Pocket-Mainnet", "address": "https://pocket-mainnet-rpc.pn.stakenodes.org"}
+        {"provider": "Pocket-Mainnet", "address": "https://sauron-rpc.infra.pocket.network"}
     ],
     "transaction_service": "pocket-mainnet",
     "features": ["dashboard", "blocks", "tx", "applications", "suppliers", "gateways", "services", "validators", "parameters"],

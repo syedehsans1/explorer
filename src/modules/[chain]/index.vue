@@ -42,9 +42,6 @@ useSEO({
   description: `Explore the ${chainName.value} blockchain dashboard. View real-time blocks, transactions, validators, network statistics, and node runner performance on the Pocket Network Explorer.`,
   keywords: `${chainName.value}, blockchain dashboard, network statistics, validators, node runners`,
 });
-// const coinInfo = computed(() => {
-//   return store.coinInfo;
-// });
 
 const transactionStats = ref({
   total: 0,
@@ -66,8 +63,6 @@ const averageBlockTime = computed(() => {
 
 const averageTxPerBlock = computed(() => {
   if (!base.recents || base.recents.length === 0) return '0.0';
-
-  // Calculate this only once via computed property instead of in template
   const totalTxs = base.recents.reduce((sum, block) => sum + (block.block?.data?.txs?.length || 0), 0);
   return (totalTxs / Math.max(1, base.recents.length)).toFixed(1);
 });
@@ -97,15 +92,13 @@ const fullTxHistoryCounts = ref<number[]>([]);
 const txChartOptions = computed(() => {
   const chartType = txChartType.value;
   
-  // Stroke configuration based on chart type
   const strokeConfig = chartType === 'bar' 
-    ? { width: 0 } // No stroke for bar charts
+    ? { width: 0 }
     : {
         curve: chartType === 'area' ? 'smooth' : 'straight',
         width: 2
       };
   
-  // Fill configuration
   const fillConfig = chartType === 'bar'
     ? { opacity: 1, type: 'solid' }
     : {
@@ -123,63 +116,38 @@ const txChartOptions = computed(() => {
     chart: {
       type: chartType,
       height: 280,
-      toolbar: {
-        show: false
-      },
-      zoom: {
-        enabled: false
-      }
+      toolbar: { show: false },
+      zoom: { enabled: false }
     },
-    colors: ['#A3E635'], // Light green color
-    dataLabels: {
-      enabled: false
-    },
+    colors: ['#A3E635'],
+    dataLabels: { enabled: false },
     stroke: strokeConfig,
     fill: fillConfig,
     grid: {
       borderColor: 'rgba(255, 255, 255, 0.1)',
-      row: {
-        colors: ['transparent'],
-        opacity: 0.5
-      }
+      row: { colors: ['transparent'], opacity: 0.5 }
     },
     markers: chartType === 'bar' ? { size: 0 } : chartType === 'line' ? {
       size: 4,
       strokeWidth: 0,
-      hover: {
-        size: 6
-      }
+      hover: { size: 6 }
     } : {
       size: 0,
-      hover: {
-        size: 4
-      }
+      hover: { size: 4 }
     },
     xaxis: {
       categories: txChartCategories.value,
       labels: {
-        style: {
-          colors: 'rgb(116, 109, 105)'
-        },
-        formatter: function (value: string) {
-          return value;
-        }
+        style: { colors: 'rgb(116, 109, 105)' },
+        formatter: function (value: string) { return value; }
       },
-      axisBorder: {
-        show: false
-      },
-      axisTicks: {
-        show: false
-      }
+      axisBorder: { show: false },
+      axisTicks: { show: false }
     },
     yaxis: {
       labels: {
-        style: {
-          colors: 'rgb(116, 109, 105)'
-        },
-        formatter: function (value: number) {
-          return format.formatNumber(value);
-        }
+        style: { colors: 'rgb(116, 109, 105)' },
+        formatter: function (value: number) { return format.formatNumber(value); }
       }
     },
     tooltip: {
@@ -200,16 +168,29 @@ const txChartSeries = ref([
   }
 ]);
 
-// Blocks API state (server-side fetched, like transactions)
+// Blocks API state
 interface ApiBlockItem {
   id: string;
   height: number;
   hash: string;
   timestamp: string;
+  //  Server alag alag field names use kar sakta hai
   block_production_time?: number;
+  production_time?: number;
+  block_time?: number;
   proposer: string;
   chain: string;
   transaction_count?: number;
+}
+
+//  Helper: kisi bhi field name se production time nikalo
+function getBlockProductionTime(block: ApiBlockItem): number {
+  return Number(
+    block.block_production_time ||
+    block.production_time ||
+    block.block_time ||
+    0
+  )
 }
 
 const currentChainName = computed(() => blockchain?.current?.chainName || props.chain || 'pocket-beta');
@@ -221,13 +202,23 @@ const blocksPage = ref(1);
 const blocksLimit = ref(25);
 const blocksTotal = ref(0);
 const blocksTotalPages = ref(0);
-const avgBlockProductionTime = ref<string | null>(null);
+const avgBlockProductionTime = ref<number | null>(null);
+
+//  Track last known height to detect new blocks
+const lastKnownHeightDashboard = ref<number>(0)
+//  Lock: ek waqt mein ek hi prepend operation chale
+const isPrependingDashboard = ref(false)
 
 // Fallback state for blocks
 const isBlocksNodeFallback = ref(false);
 const blocksFallbackError = ref('');
 const isTxsNodeFallback = ref(false);
 const txsFallbackError = ref('');
+
+//  Dashboard transactions auto-prepend tracking
+const lastKnownTxHashDashboard = ref<string>('')
+const lastKnownTxBlockDashboard = ref<number>(0)
+const isPrependingTxsDashboard = ref(false)
 
 // Indexer health status
 interface ChainStatus {
@@ -272,7 +263,6 @@ async function loadIndexerHealth() {
   }
 }
 
-// Computed property to check if indexer is behind for current chain
 const isIndexerBehind = computed(() => {
   if (!indexerHealth.value?.chains || !apiChainName.value) return false;
   const chainStatus = indexerHealth.value.chains.find(
@@ -281,76 +271,241 @@ const isIndexerBehind = computed(() => {
   return chainStatus ? chainStatus.monitoring_height < (chainStatus.latest_height - 10) : false;
 });
 
-// Get current chain indexer status
 const currentChainIndexerStatus = computed(() => {
   if (!indexerHealth.value?.chains || !apiChainName.value) return null;
   return indexerHealth.value.chains.find((c) => c.chain === apiChainName.value) || null;
 });
 
-// async function loadBlocks() {
-//   loadingBlocks.value = true;
-//   try {
-//     const url = `/api/v1/blocks?chain=${apiChainName.value}&page=${blocksPage.value}&limit=${blocksLimit.value}`;
-//     const response = await fetch(url);
-//     const result = await response.json();
-//     if (response.ok) {
-//       blocks.value = result.data || [];
-//       blocksTotal.value = result.meta?.total || 0;
-//       blocksTotalPages.value = result.meta?.totalPages || 0;
-//       avgBlockProductionTime.value = Number(result.meta?.avgBlockProductionTime || null).toFixed(2) || null;
-//     } else {
-//       blocks.value = [];
-//       blocksTotal.value = 0;
-//       blocksTotalPages.value = 0;
-//       console.error('Error loading blocks:', result);
-//     }
-//   } catch (e) {
-//     console.error('Error loading blocks:', e);
-//     blocks.value = [];
-//     blocksTotal.value = 0;
-//     blocksTotalPages.value = 0;
-//   } finally {
-//     loadingBlocks.value = false;
-//   }
-// }
+//  Node se sirf ek naya block fetch karo (primary source)
+async function fetchSingleBlockNodeDashboard(height: number): Promise<ApiBlockItem | null> {
+  try {
+    // Current + previous block fetch karo production time ke liye
+    const [block, prevBlock] = await Promise.all([
+      blockchain.rpc.getBaseBlockAt(String(height)).catch(() => null),
+      height > 1 ? blockchain.rpc.getBaseBlockAt(String(height - 1)).catch(() => null) : Promise.resolve(null)
+    ])
+
+    if (!block) return null
+    const blockHeight = parseInt(block.block?.header?.height || '0')
+    if (blockHeight !== height) return null
+
+    //  Production time = current time - previous block time
+    const currentTime = new Date(block.block?.header?.time || '').getTime()
+    const prevTime = prevBlock
+      ? new Date(prevBlock.block?.header?.time || '').getTime()
+      : 0
+    const productionTimeSec = (prevTime && currentTime && currentTime > prevTime)
+      ? parseFloat(((currentTime - prevTime) / 1000).toFixed(3))
+      : 0
+
+    return {
+      id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
+      height: blockHeight,
+      hash: block.block_id?.hash || '',
+      timestamp: block.block?.header?.time || new Date().toISOString(),
+      proposer: block.block?.header?.proposer_address || '',
+      chain: block.block?.header?.chain_id || apiChainName.value,
+      transaction_count: block.block?.data?.txs?.length || 0,
+      block_production_time: productionTimeSec,
+    }
+  } catch {
+    return null
+  }
+}
+
+//  Server se specific height ka block fetch karo
+async function fetchSingleBlockServerDashboard(height: number): Promise<ApiBlockItem | null> {
+  try {
+    // Height-specific endpoint use karo
+    const url = `/api/v1/blocks/${height}?chain=${apiChainName.value}`
+    const res = await fetch(url)
+    if (!res.ok) {
+      // Fallback: list endpoint se try karo aur height match karo
+      const listUrl = `/api/v1/blocks?chain=${apiChainName.value}&page=1&limit=5`
+      const listRes = await fetch(listUrl)
+      if (!listRes.ok) return null
+      const listText = await listRes.text()
+      if (!listText) return null
+      const listData = JSON.parse(listText)
+      const blockList: ApiBlockItem[] = listData.blocks || listData.data || []
+      // Sirf exact height match wala block return karo
+      return blockList.find((b: ApiBlockItem) => Number(b.height) === height) || null
+    }
+    const text = await res.text()
+    if (!text) return null
+    const data = JSON.parse(text)
+    const block = data.block || data.data || data
+    if (Number(block?.height) !== height) return null
+    return block
+  } catch {
+    return null
+  }
+}
+
+//  Naya block table ke upar prepend karo - poora reload nahi
+async function prependNewBlockDashboard(height: number) {
+  // Lock: ek waqt mein ek hi prepend chale
+  if (isPrependingDashboard.value) return
+  isPrependingDashboard.value = true
+
+  try {
+    // Double check: kya yeh block already list mein hai?
+    if (blocks.value.some(b => Number(b.height) === height)) return
+
+    // Pehle node se try karo - fast aur accurate
+    let newBlock = await fetchSingleBlockNodeDashboard(height)
+
+    // Agar node se nahi mila toh server se try karo
+    if (!newBlock) {
+      newBlock = await fetchSingleBlockServerDashboard(height)
+    }
+
+    if (!newBlock) return
+
+    // Final check: height bilkul sahi honi chahiye
+    if (Number(newBlock.height) !== height) return
+
+    // Ek aur check: kya duplicate toh nahi aa gaya is doran?
+    if (blocks.value.some(b => Number(b.height) === height)) return
+
+    // Table ke upar naya block add karo
+    blocks.value = [newBlock, ...blocks.value]
+
+    // Agar list blocksLimit se bari ho jaye toh last wala remove karo
+    if (blocks.value.length > blocksLimit.value) {
+      blocks.value = blocks.value.slice(0, blocksLimit.value)
+    }
+  } finally {
+    isPrependingDashboard.value = false
+  }
+}
+
+//  Dashboard: server se latest txs fetch karo (prepend ke liye)
+async function fetchLatestTxsDashboard(limit = 10): Promise<any[]> {
+  try {
+    const chainVal = getApiChainName(blockchain.current?.chainName || props.chain || 'pocket-lego-testnet')
+    const url = `/api/v1/transactions?chain=${chainVal}&page=1&limit=${limit}&sort_by=timestamp&sort_order=desc`
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.data || []
+  } catch {
+    return []
+  }
+}
+
+//  Dashboard transactions - local ref (base.allTxs direct mutate safe nahi hota)
+const dashboardTxs = ref<any[]>([])
+const dashboardTxsInitialized = ref(false)
+
+//  base.allTxs load hone par dashboardTxs initialize karo
+watch(() => base.allTxs, (newTxs) => {
+  if (newTxs && newTxs.length > 0 && !dashboardTxsInitialized.value) {
+    dashboardTxs.value = [...newTxs]
+    dashboardTxsInitialized.value = true
+    lastKnownTxHashDashboard.value = newTxs[0]?.hash || ''
+    lastKnownTxBlockDashboard.value = Math.max(...newTxs.map((tx: any) => Number(tx.block_height || 0)))
+  }
+}, { immediate: true, deep: false })
+
+//  Dashboard: naye transactions table ke upar prepend karo
+async function prependNewTxsDashboard() {
+  if (isPrependingTxsDashboard.value) return
+  if (isTxsNodeFallback.value) return
+  
+  // dashboardTxs initialize na hua ho toh base.allTxs se karo
+  if (dashboardTxs.value.length === 0) {
+    if (base.allTxs && base.allTxs.length > 0) {
+      dashboardTxs.value = [...base.allTxs]
+      dashboardTxsInitialized.value = true
+    } else {
+      return
+    }
+  }
+
+  isPrependingTxsDashboard.value = true
+
+  try {
+    const latestTxs = await fetchLatestTxsDashboard(10)
+    if (!latestTxs.length) return
+
+    // Existing hashes ka set banao
+    const existingHashes = new Set(dashboardTxs.value.map((tx: any) => tx.hash))
+
+    // Naye transactions filter karo
+    const newTxs = latestTxs.filter((tx: any) => !existingHashes.has(tx.hash))
+    if (newTxs.length === 0) return
+
+    //  Local ref mein prepend karo - Vue reactivity perfectly kaam karti hai
+    dashboardTxs.value = [...newTxs, ...dashboardTxs.value]
+
+    // lastKnown update karo
+    lastKnownTxHashDashboard.value = dashboardTxs.value[0]?.hash || ''
+
+  } finally {
+    isPrependingTxsDashboard.value = false
+  }
+}
+
+//  Watch currentBlockHeight - jab naya block aaye sirf woh prepend karo
+watch(currentBlockHeight, async (newHeight, oldHeight) => {
+  const newH = Number(newHeight)
+  const oldH = Number(oldHeight)
+
+  // Sirf tab karo jab height genuinely badhi ho
+  if (newH <= oldH) return
+  // Sirf tab jab blocks already loaded hain
+  if (blocks.value.length === 0) return
+  // lastKnownHeight check - duplicate se bacho
+  if (newH <= lastKnownHeightDashboard.value) return
+
+  // Immediately update karo taake duplicate watch trigger block ho
+  lastKnownHeightDashboard.value = newH
+
+  await prependNewBlockDashboard(newH)
+})
+
+//  Watch currentBlockHeight - jab naya block aaye toh dashboard transactions bhi prepend karo
+watch(currentBlockHeight, async (newHeight, oldHeight) => {
+  const newH = Number(newHeight)
+  const oldH = Number(oldHeight)
+
+  if (newH <= oldH) return
+  if (!base.allTxs || base.allTxs.length === 0) return
+  if (isTxsNodeFallback.value) return
+  if (newH <= lastKnownTxBlockDashboard.value) return
+
+  lastKnownTxBlockDashboard.value = newH
+
+  await prependNewTxsDashboard()
+})
 
 // 🔹 Node se blocks fetch karo (Dashboard fallback)
 async function getBlocksFromNodeDashboard() {
   try {
     console.log('[Dashboard Fallback] Starting node fallback for blocks...')
 
-    // Wait for RPC to be ready (max 10 seconds)
     let rpcRetries = 0
     while (!blockchain.rpc && rpcRetries < 20) {
-      console.log(`[Dashboard Fallback] Waiting for RPC... retry ${rpcRetries + 1}/20`)
       await new Promise(resolve => setTimeout(resolve, 500))
       rpcRetries++
     }
 
     if (!blockchain.rpc) {
-      console.error('[Dashboard Fallback] RPC not available after waiting')
       throw new Error('RPC not available')
     }
 
-    console.log('[Dashboard Fallback] RPC is available')
-
-    // Try to fetch latest block from RPC directly if base store doesn't have it
     if (!base.latest?.block?.header?.height) {
-      console.log('[Dashboard Fallback] Base store has no block data, fetching from RPC...')
       try {
         const latestBlock = await blockchain.rpc.getBaseBlockLatest()
         if (latestBlock?.block?.header?.height) {
           base.latest = latestBlock
-          console.log('[Dashboard Fallback] Successfully fetched latest block:', latestBlock.block.header.height)
         }
       } catch (err) {
         console.warn('[Dashboard Fallback] Could not fetch latest block from RPC:', err)
       }
-    } else {
-      console.log('[Dashboard Fallback] Base store already has block data:', base.latest.block.header.height)
     }
 
-    // Get latest blocks from base store
     let retries = 0
     while (!base.latest?.block?.header?.height) {
       if (retries > 10) {
@@ -367,7 +522,6 @@ async function getBlocksFromNodeDashboard() {
     const startHeight = Math.max(endHeight - blocksLimit.value + 1, 1)
 
     const blockPromises = []
-
     for (let height = endHeight; height >= startHeight; height--) {
       blockPromises.push(
         blockchain.rpc.getBaseBlockAt(String(height)).catch(() => null)
@@ -376,9 +530,20 @@ async function getBlocksFromNodeDashboard() {
 
     const fetchedBlocks = await Promise.all(blockPromises)
 
-    const nodeBlocks = fetchedBlocks
-      .filter(block => block !== null)
-      .map((block: any) => ({
+    const validBlocks = fetchedBlocks.filter(block => block !== null)
+
+    //  Production time calculate karo timestamps se
+    const nodeBlocks = validBlocks.map((block: any, index: number) => {
+      const currentTime = new Date(block.block?.header?.time || '').getTime()
+      const prevBlock = validBlocks[index + 1] // next in array = older block
+      const prevTime = prevBlock
+        ? new Date(prevBlock.block?.header?.time || '').getTime()
+        : 0
+      const productionTimeSec = (prevTime && currentTime && currentTime > prevTime)
+        ? parseFloat(((currentTime - prevTime) / 1000).toFixed(3))
+        : 0
+
+      return {
         id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
         height: parseInt(block.block?.header?.height || '0'),
         hash: block.block_id?.hash || '',
@@ -386,11 +551,10 @@ async function getBlocksFromNodeDashboard() {
         proposer: block.block?.header?.proposer_address || '',
         chain: block.block?.header?.chain_id || apiChainName.value,
         transaction_count: block.block?.data?.txs?.length || 0,
-        block_production_time: 0,
+        block_production_time: productionTimeSec,
         raw_block_size: 0
-      }))
-
-    console.log('[Dashboard Fallback] Successfully loaded blocks from node:', nodeBlocks.length)
+      }
+    })
 
     return {
       blocks: nodeBlocks,
@@ -410,22 +574,50 @@ async function loadBlocks() {
   try {
     const url = `/api/v1/blocks?chain=${apiChainName.value}&page=${blocksPage.value}&limit=${blocksLimit.value}`;
     const response = await fetch(url);
-
     const text = await response.text();
 
-    if (!text) {
-      throw new Error('Empty response from API');
-    }
+    if (!text) throw new Error('Empty response from API');
 
     const result = JSON.parse(text);
 
     if (response.ok) {
-      blocks.value = result.data || [];
+      //  Field names normalize karo - server ke alag formats handle karo
+      const rawBlocks = result.data || [];
+      
+      // DEBUG: pehle block ka structure console mein dekho
+      if (rawBlocks.length > 0) {
+        console.log('[Blocks Debug] First block from server:', JSON.stringify(rawBlocks[0], null, 2))
+      }
+      
+      blocks.value = rawBlocks.map((b: any) => ({
+        ...b,
+        //  Production time - string ya number dono handle - parseFloat baad mein karega
+        block_production_time: (
+          b.block_production_time ??
+          b.production_time ??
+          b.block_time ??
+          b.blockTime ??
+          b.avg_block_time ??
+          b.time_diff ??
+          b.timeDiff ??
+          b.duration ??
+          0
+        ),
+        //  Transaction count
+        transaction_count: Number(
+          b.transaction_count ??
+          b.tx_count ??
+          b.txCount ??
+          b.num_txs ??
+          b.txs ??
+          0
+        ),
+      }));
       blocksTotal.value = result.meta?.total || 0;
       blocksTotalPages.value = result.meta?.totalPages || 0;
       avgBlockProductionTime.value =
         result.meta?.avgBlockProductionTime != null
-          ? Number(result.meta.avgBlockProductionTime).toFixed(2)
+          ? Number(result.meta.avgBlockProductionTime)
           : null;
       isBlocksNodeFallback.value = false;
     } else {
@@ -436,9 +628,7 @@ async function loadBlocks() {
 
     try {
       isBlocksNodeFallback.value = true;
-
       const nodeData = await getBlocksFromNodeDashboard();
-
       blocks.value = nodeData.blocks;
       blocksTotal.value = nodeData.total;
       blocksTotalPages.value = nodeData.totalPages;
@@ -446,7 +636,6 @@ async function loadBlocks() {
       console.error('[Dashboard] Node fallback also failed:', nodeError);
       blocksFallbackError.value = nodeError.message || 'Both server and node are unavailable';
       isBlocksNodeFallback.value = true;
-      // Keep previous data or show empty
       if (blocks.value.length === 0) {
         blocks.value = [];
         blocksTotal.value = 0;
@@ -458,42 +647,86 @@ async function loadBlocks() {
   }
 }
 
+// Map raw latest block (from base store / RPC) into ApiBlockItem shape for the dashboard table.
+// Optionally takes the previous row so we can derive production time as
+// time(current) - time(previous) in seconds.
+function latestBlockToApiBlockItem(prev?: ApiBlockItem | null): ApiBlockItem | null {
+  const latestBlock = base.latest?.block;
+  if (!latestBlock?.header) return null;
 
-// Add these refs for block list virtualization after the existing refs
+  const height = parseInt(latestBlock.header.height || '0');
+
+  let blockProductionTime: number | undefined;
+  const currentTs = latestBlock.header.time;
+  const prevTs = prev?.timestamp;
+  if (currentTs && prevTs) {
+    const currentMs = new Date(currentTs).getTime();
+    const prevMs = new Date(prevTs).getTime();
+    if (Number.isFinite(currentMs) && Number.isFinite(prevMs) && currentMs > prevMs) {
+      blockProductionTime = (currentMs - prevMs) / 1000;
+    }
+  }
+
+  return {
+    id: `${latestBlock.header.chain_id}:${latestBlock.header.height}`,
+    height,
+    hash: base.latest?.block_id?.hash || '',
+    timestamp: latestBlock.header.time || new Date().toISOString(),
+    proposer: latestBlock.header.proposer_address || '',
+    chain: latestBlock.header.chain_id || apiChainName.value,
+    transaction_count: latestBlock.data?.txs?.length || 0,
+    block_production_time: blockProductionTime,
+  };
+}
+
+// When latest block advances and we're on the first page, prepend the new block into the dashboard table in-place
+function tryPrependLatestBlockToDashboard() {
+  if (loadingBlocks.value) return;
+  if (blocksPage.value !== 1) return;
+  if (!blocks.value.length) return;
+
+  const latest = base.latest?.block;
+  if (!latest?.header?.height) return;
+
+  const latestHeight = Number(latest.header.height);
+  const topHeight = Number(blocks.value[0]?.height || 0);
+
+  if (!Number.isFinite(latestHeight) || latestHeight <= topHeight) return;
+
+  const previousTop = blocks.value[0] || null;
+  const row = latestBlockToApiBlockItem(previousTop);
+  if (!row) return;
+
+  // Prepend newest block and trim to current limit
+  blocks.value = [row, ...blocks.value];
+  if (blocks.value.length > blocksLimit.value) {
+    blocks.value.pop();
+  }
+
+  // Keep total count in sync (at least not smaller than latest height)
+  blocksTotal.value = Math.max(blocksTotal.value, latestHeight);
+}
+
+
+// Refs for block list virtualization
 const visibleBlocks = ref<{ item: any; index: number }[]>([]);
-const visibleTxs = ref<{ item: any; index: number }[]>([]);
 const blockTableContainer = ref<HTMLDivElement | null>(null);
-const txTableContainer = ref<HTMLDivElement | null>(null);
-const itemHeight = 42; // Height of table rows
-const bufferSize = 5; // Number of additional items to render
-const ticking = ref(false); // For requestAnimationFrame throttling
+const itemHeight = 42;
+const bufferSize = 5;
+const ticking = ref(false);
 const blockScrollTimeout = ref<NodeJS.Timeout | null>(null);
-const txScrollTimeout = ref<NodeJS.Timeout | null>(null);
 const updateNetworkStatsTimeout = ref<NodeJS.Timeout | null>(null);
 const indexerHealthInterval = ref<NodeJS.Timeout | null>(null);
 
-// Add debounced update function for network stats
 function debouncedUpdateNetworkStats() {
   if (updateNetworkStatsTimeout.value) {
     clearTimeout(updateNetworkStatsTimeout.value);
   }
-
   updateNetworkStatsTimeout.value = setTimeout(() => {
     if (!isNetworkStatusLoading.value) {
       loadNetworkStats();
     }
-  }, 500); // 500ms debounce
-}
-
-// Add these methods for virtualization before the existing onMounted function
-function initVirtualLists() {
-  nextTick(() => {
-    // Initialize transaction table virtualization
-    if (txTableContainer.value) {
-      updateVisibleTxs();
-      txTableContainer.value.addEventListener('scroll', handleTxScroll, { passive: true });
-    }
-  });
+  }, 500);
 }
 
 function handleBlockScroll() {
@@ -506,35 +739,18 @@ function handleBlockScroll() {
   }
 }
 
-function handleTxScroll() {
-  if (!ticking.value) {
-    ticking.value = true;
-    requestAnimationFrame(() => {
-      updateVisibleTxs();
-      ticking.value = false;
-    });
-  }
-}
-
 function updateVisibleBlocks() {
   if (!blockTableContainer.value || !base.recents?.length) return;
-
   const container = blockTableContainer.value;
   const scrollTop = container.scrollTop;
   const viewportHeight = container.clientHeight;
-
-  // Calculate which items should be visible
   const startIndex = Math.floor(scrollTop / itemHeight) - bufferSize;
   const endIndex = Math.ceil((scrollTop + viewportHeight) / itemHeight) + bufferSize;
-
   const start = Math.max(0, startIndex);
   const end = Math.min(base.recents.length, endIndex);
-
-  // Only update if the visible range has changed significantly
   if (visibleBlocks.value.length === 0 ||
     Math.abs(visibleBlocks.value[0]?.index - start) >= 2 ||
     Math.abs(visibleBlocks.value[visibleBlocks.value.length - 1]?.index - (end - 1)) >= 2) {
-
     visibleBlocks.value = base.recents.slice(start, end).map((item, index) => ({
       item,
       index: start + index
@@ -542,88 +758,59 @@ function updateVisibleBlocks() {
   }
 }
 
-function updateVisibleTxs() {
-  if (!txTableContainer.value || !base.allTxs?.length) return;
-
-  const container = txTableContainer.value;
-  const scrollTop = container.scrollTop;
-  const viewportHeight = container.clientHeight;
-
-  // Calculate which items should be visible
-  const startIndex = Math.floor(scrollTop / itemHeight) - bufferSize;
-  const endIndex = Math.ceil((scrollTop + viewportHeight) / itemHeight) + bufferSize;
-
-  const start = Math.max(0, startIndex);
-  const end = Math.min(base.allTxs.length, endIndex);
-
-  // Only update if the visible range has changed significantly
-  if (visibleTxs.value.length === 0 ||
-    Math.abs(visibleTxs.value[0]?.index - start) >= 2 ||
-    Math.abs(visibleTxs.value[visibleTxs.value.length - 1]?.index - (end - 1)) >= 2) {
-    visibleTxs.value = base.allTxs.slice(start, end).map((item, index) => ({
-      item,
-      index: start + index
-    }));
-  }
-}
 
 onMounted(async () => {
   store.loadDashboard();
   walletStore.loadMyAsset();
   paramStore.handleAbciInfo();
   console.log("current chain", blockchain.current)
-  // Set loading state
   isNetworkStatusLoading.value = true;
 
-  // Load transactions first with proper chain name
   const currentChain = blockchain.current?.chainName || props.chain || 'pocket-lego-testnet';
-  const apiChainName = getApiChainName(currentChain);
-  console.log('[Home Page] Loading transactions for chain:', apiChainName);
+  const apiChainNameVal = getApiChainName(currentChain);
+  console.log('[Home Page] Loading transactions for chain:', apiChainNameVal);
 
-  // Try to load transactions and track if fallback is used
   try {
-    // First try server API directly to check availability
-    const testResponse = await fetch(`/api/v1/transactions?chain=${apiChainName}&page=1&limit=1`).catch(() => null);
-
+    const testResponse = await fetch(`/api/v1/transactions?chain=${apiChainNameVal}&page=1&limit=1`).catch(() => null);
     if (!testResponse || !testResponse.ok) {
-      // Server is down, will use node fallback
       isTxsNodeFallback.value = true;
       txsFallbackError.value = '';
     } else {
-      // Server is up
       isTxsNodeFallback.value = false;
       txsFallbackError.value = '';
     }
   } catch (e) {
-    // Server check failed
     isTxsNodeFallback.value = true;
     txsFallbackError.value = '';
   }
 
-  // Now load transactions
-  base.getAllTxs(apiChainName).catch(err => {
+  base.getAllTxs(apiChainNameVal).then(() => {
+    //  Transactions load hone ke baad lastKnownBlock set karo
+    if (base.allTxs && base.allTxs.length > 0) {
+      lastKnownTxBlockDashboard.value = Math.max(...base.allTxs.map((tx: any) => Number(tx.block_height || 0)))
+      lastKnownTxHashDashboard.value = base.allTxs[0]?.hash || ''
+    }
+    // currentBlockHeight se bhi set karo agar already badh gaya ho
+    const currentH = Number(currentBlockHeight.value)
+    if (currentH > lastKnownTxBlockDashboard.value) {
+      lastKnownTxBlockDashboard.value = currentH
+    }
+  }).catch(err => {
     console.error('[Home Page] Error loading transactions:', err);
     txsFallbackError.value = err.message || 'Failed to load transactions';
   });
 
-  // Then load stats that depend on transaction data
   loadNetworkStats();
   loadTransactionHistory();
   loadServicesSummary24h();
 
-  // Mark network status as loaded
   isNetworkStatusLoading.value = false;
 
-  // Initialize virtual scrolling
-  initVirtualLists();
-
-  // Load latest blocks via API for the dashboard table
+  // ✅ Blocks load karo - lastKnownHeight automatically set ho jaayega inside loadBlocks()
   loadBlocks();
 
-  // Load indexer health status
   loadIndexerHealth();
   
-  // Set up periodic refresh for indexer health (every 30 seconds)
   indexerHealthInterval.value = setInterval(() => {
     loadIndexerHealth();
   }, 30000);
@@ -638,9 +825,7 @@ blockchain.$subscribe((m, s) => {
     store.loadDashboard();
     walletStore.loadMyAsset();
     paramStore.handleAbciInfo()
-    // Reload 24h services summary on chain change
     loadServicesSummary24h();
-    // Reload indexer health on chain change
     loadIndexerHealth();
   }
 });
@@ -649,6 +834,20 @@ function shortName(name: string, id: string) {
     name.toLowerCase().startsWith('0x')
     ? id
     : name;
+}
+
+const TX_TYPE_LABELS: Record<string, string> = {
+  'MsgSend (bank)': 'Send',
+  'MsgEditValidator (node)': 'EditValidator',
+  'MsgSubmitProof (proof)': 'SubmitProof',
+  'MsgCreateClaim (proof)': 'CreateClaim',
+};
+
+function formatTxType(type: string): string {
+  if (!type) return type;
+  if (TX_TYPE_LABELS[type]) return TX_TYPE_LABELS[type];
+  // Fallback: strip "Msg" prefix and " (module)" suffix
+  return type.replace(/^Msg/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
 }
 
 const comLinks = [
@@ -674,7 +873,6 @@ const comLinks = [
   },
 ];
 
-// wallet box
 const change = computed(() => {
   const token = walletStore.balanceOfStakingToken;
   return token ? format.priceChanges(token.denom) : 0;
@@ -716,7 +914,6 @@ const amount = computed({
   }
 })
 
-// Helpers for formatting numbers in tooltips
 function formatWithCommas(value: number) {
   try {
     return Number(value || 0).toLocaleString();
@@ -742,51 +939,22 @@ const networkStats = ref({
   services: 0
 });
 
-// 24h services summary (relays and compute units)
 const totalRelays24h = ref(0);
 const totalComputeUnits24h = ref(0);
 
-// async function loadServicesSummary24h() {
-//   try {
-//     const params = new URLSearchParams();
-//     params.append('window', '1');
-//     params.append('chain', apiChainName.value);
-//     const response = await fetch(`/api/v1/network-growth/summary?${params.toString()}`);
-//     const result = await response.json();
-//     if (response.ok && result?.data) {
-//       totalRelays24h.value = Number(result.data.relays || 0);
-//       totalComputeUnits24h.value = Number(result.data.claimed_compute_units || 0);
-//     } else {
-//       totalRelays24h.value = 0;
-//       totalComputeUnits24h.value = 0;
-//       console.error('Error loading 24h services summary:', result);
-//     }
-//   } catch (e) {
-//     totalRelays24h.value = 0;
-//     totalComputeUnits24h.value = 0;
-//     console.error('Error loading 24h services summary:', e);
-//   }
-// }
 
 async function loadServicesSummary24h() {
   try {
     const params = new URLSearchParams();
     params.append('window', '1');
     params.append('chain', apiChainName.value);
-
     const response = await fetch(`/api/v1/network-growth/summary?${params.toString()}`);
-
-    const text = await response.text(); // 👈 pehle raw text lo
-
-    if (!text) {
-      throw new Error('Empty response from API');
-    }
-
-    const result = JSON.parse(text); // 👈 now safe parse
-
+    const text = await response.text();
+    if (!text) throw new Error('Empty response from API');
+    const result = JSON.parse(text);
     if (response.ok && result?.data) {
-      totalRelays24h.value = Number(result.data.relays || 0);
-      totalComputeUnits24h.value = Number(result.data.claimed_compute_units || 0);
+      totalRelays24h.value = result.data.estimated_relays;
+      totalComputeUnits24h.value = result.data.estimated_compute_units;
     } else {
       totalRelays24h.value = 0;
       totalComputeUnits24h.value = 0;
@@ -812,88 +980,67 @@ const historicalData = ref({
   ]
 });
 
-// Chart state for Network Growth
 const networkGrowthTab = ref<'core-services' | 'performance'>('performance');
 const networkGrowthChartType = ref<'bar' | 'area' | 'line'>('area');
 const chartCategories = ref<string[]>([]);
 const performanceMetric = ref<'relays' | 'compute-units'>('compute-units');
-const networkGrowthWindow = ref(7); // days
+const networkGrowthWindow = ref(7);
 
-// Computed series based on active tab
 const activeNetworkGrowthSeries = computed(() => {
   if (!historicalData.value.series || historicalData.value.series.length === 0) {
     return [];
   }
   
   if (networkGrowthTab.value === 'core-services') {
-    // Return Core Services series (Applications, Suppliers, Gateways, Services)
     const series = historicalData.value.series.slice(0, 4);
     return series.filter(s => s.data && s.data.length > 0).map(s => ({
       ...s,
-      yAxisIndex: 0 // Use first y-axis
+      yAxisIndex: 0
     }));
   } else {
-    // Return the selected Performance metric (Relays or both Compute Units series)
-    // Return the selected Performance metric (Relays or both Compute Units series)
     if (performanceMetric.value === 'relays') {
-      const relaysIndex = 4; // Relays is at index 4
+      const relaysIndex = 4;
       const selectedSeries = historicalData.value.series[relaysIndex];
-      
       if (selectedSeries && selectedSeries.data && selectedSeries.data.length > 0) {
-        return [{
-          ...selectedSeries,
-          yAxisIndex: 0 // Use single y-axis for relays
-        }];
+        return [{ ...selectedSeries, yAxisIndex: 0 }];
       }
       return [];
     } else {
-    // Return both compute units series (Claimed and Estimated)
-      const proofSubmissionsIndex = 5; // Proof Submissions CU is at index 5
-      const settledClaimsIndex = 6; // Settled Claims CU is at index 6
+      const proofSubmissionsIndex = 5;
+      const settledClaimsIndex = 6;
       const proofSubmissionsSeries = historicalData.value.series[proofSubmissionsIndex];
       const settledClaimsSeries = historicalData.value.series[settledClaimsIndex];
-      
       const result = [];
       if (proofSubmissionsSeries && proofSubmissionsSeries.data && proofSubmissionsSeries.data.length > 0) {
-        result.push({
-          ...proofSubmissionsSeries,
-          yAxisIndex: 0
-        });
+        result.push({ ...proofSubmissionsSeries, yAxisIndex: 0 });
       }
       if (settledClaimsSeries && settledClaimsSeries.data && settledClaimsSeries.data.length > 0) {
-        result.push({
-          ...settledClaimsSeries,
-          yAxisIndex: 0
-        });
+        result.push({ ...settledClaimsSeries, yAxisIndex: 0 });
       }
       return result;
     }
   }
 });
 
-// Computed chart options based on chart type and active tab
 const chartOptions = computed(() => {
   const isCoreServices = networkGrowthTab.value === 'core-services';
   const chartType = networkGrowthChartType.value;
   
-  // Base colors - Core Services: first 4, Performance: single color for relays, two colors for compute units
   const colors = isCoreServices 
     ? ['#FFB206', '#09279F', '#5E9AE4', '#60BC29']
     : performanceMetric.value === 'relays' 
       ? ['#A855F7'] 
-      : ['#EF4444', '#F97316']; // Red for Proof Submissions, Orange for Settled Claims
+      : ['#EF4444', '#F97316'];
   
-  // Stroke configuration based on chart type
   const isComputeUnits = !isCoreServices && performanceMetric.value === 'compute-units';
   const strokeConfig = chartType === 'bar' 
-    ? { width: 0 } // No stroke for bar charts
+    ? { width: 0 }
     : {
         curve: chartType === 'area' ? 'smooth' : 'straight',
         width: isCoreServices ? [2.5, 2.5, 2.5, 2.5] : (isComputeUnits ? [2.5, 2.5] : 2.5),
-        dashArray: isCoreServices ? [0, 0, 0, 0] : (isComputeUnits ? [0, 5] : 0) // Dashed line for settled claims
+        dashArray: isCoreServices ? [0, 0, 0, 0] : (isComputeUnits ? [0, 5] : 0)
       };
   
-  // Fill configuration
   const fillConfig = chartType === 'bar'
     ? { opacity: 1, type: 'solid' }
     : {
@@ -907,14 +1054,12 @@ const chartOptions = computed(() => {
         } : undefined
       };
   
-  // Y-axis configuration
   const yaxisConfig = isCoreServices
     ? [{ 
         labels: { style: { colors: 'rgb(116, 109, 105)' } }, 
         title: { text: 'Entities' } 
       }]
     : [
-        // Single y-axis for selected performance metric
         { 
           labels: { 
             style: { colors: 'rgb(116, 109, 105)' },
@@ -937,12 +1082,8 @@ const chartOptions = computed(() => {
     chart: {
       type: chartType,
       height: 280,
-      toolbar: {
-        show: false
-      },
-      zoom: {
-        enabled: false
-      },
+      toolbar: { show: false },
+      zoom: { enabled: false },
       animations: {
         enabled: true,
         easing: 'easeinout',
@@ -950,17 +1091,12 @@ const chartOptions = computed(() => {
       }
     },
     colors: colors,
-    dataLabels: {
-      enabled: false
-    },
+    dataLabels: { enabled: false },
     stroke: strokeConfig,
     fill: fillConfig,
     grid: {
       borderColor: 'rgba(255, 255, 255, 0.1)',
-      row: {
-        colors: ['transparent'],
-        opacity: 0.5
-      }
+      row: { colors: ['transparent'], opacity: 0.5 }
     },
     markers: chartType === 'bar' ? { size: 0 } : chartType === 'line' ? {
       size: isComputeUnits ? [4, 4] : 4,
@@ -975,28 +1111,18 @@ const chartOptions = computed(() => {
       categories: chartCategories.value || [],
       type: 'category',
       labels: {
-        style: {
-          colors: 'rgb(116, 109, 105)'
-        },
-        formatter: function (value: string) {
-          return value;
-        }
+        style: { colors: 'rgb(116, 109, 105)' },
+        formatter: function (value: string) { return value; }
       },
-      axisBorder: {
-        show: false
-      },
-      axisTicks: {
-        show: false
-      }
+      axisBorder: { show: false },
+      axisTicks: { show: false }
     },
     yaxis: yaxisConfig,
     legend: {
       show: true,
       position: 'bottom',
       horizontalAlign: 'left',
-      labels: {
-        colors: 'rgb(116, 109, 105)'
-      }
+      labels: { colors: 'rgb(116, 109, 105)' }
     },
     tooltip: {
       theme: 'dark',
@@ -1004,10 +1130,7 @@ const chartOptions = computed(() => {
       intersect: false,
       y: {
         formatter: function (value: number, opts: any) {
-          if (isCoreServices) {
-            return `${formatWithCommas(value)}`;
-          }
-          // For performance metrics (relays and compute units), use compact format
+          if (isCoreServices) return `${formatWithCommas(value)}`;
           return `${formatCompact(value)}`;
         }
       }
@@ -1015,15 +1138,12 @@ const chartOptions = computed(() => {
   };
 });
 
-// Add a cache expiration tracking
 const networkStatsCacheTime = ref(0);
-const CACHE_EXPIRATION_MS = 60000; // 1 minute cache
+const CACHE_EXPIRATION_MS = 60000;
 
 async function loadNetworkStats() {
-  // Check cache - only reload if it's expired
   const now = Date.now();
-  if (now - networkStatsCacheTime.value < CACHE_EXPIRATION_MS &&
-    networkStats.value.wallets > 0) {
+  if (now - networkStatsCacheTime.value < CACHE_EXPIRATION_MS && networkStats.value.wallets > 0) {
     console.log("Using cached network stats");
     return;
   }
@@ -1032,7 +1152,6 @@ async function loadNetworkStats() {
   pageRequest.limit = 1;
 
   try {
-    // Use Promise.all to fetch data in parallel instead of sequentially
     const [applicationsData, suppliersData, gatewaysData, servicesData, accountsData] = await Promise.all([
       blockchain.rpc.getApplications(pageRequest),
       blockchain.rpc.getSuppliers(pageRequest),
@@ -1047,16 +1166,12 @@ async function loadNetworkStats() {
     networkStats.value.services = parseInt(servicesData.pagination?.total || 0);
     networkStats.value.wallets = parseInt(accountsData.pagination?.total || '0');
 
-    // Update cache timestamp
     networkStatsCacheTime.value = now;
 
-    // Load both performance and entities data in parallel in the background
-    // This ensures both tabs have data ready immediately for instant switching
     Promise.allSettled([
       loadNetworkGrowthPerformance(networkGrowthWindow.value),
       loadNetworkGrowthEntities(networkGrowthWindow.value)
     ]).then((results) => {
-      // Check if both failed - only then fallback to generated data
       const allFailed = results.every(result => result.status === 'rejected');
       if (allFailed) {
         console.warn('Both network growth endpoints failed, using fallback data');
@@ -1068,27 +1183,18 @@ async function loadNetworkStats() {
   }
 }
 
-// Load performance metrics (relays and compute units) from fast endpoint
 async function loadNetworkGrowthPerformance(windowDays: number = 7) {
   try {
     const params = new URLSearchParams();
     params.append('window', String(windowDays));
     params.append('chain', apiChainName.value);
-
     const response = await fetch(`/api/v1/network-growth/performance?${params.toString()}`);
     const result = await response.json();
-
-    if (!response.ok) {
-      console.error('Error loading network growth performance:', result);
-      throw new Error('Network growth performance API error');
-    }
+    if (!response.ok) throw new Error('Network growth performance API error');
 
     const timeline = result?.data?.timeline || [];
-
-    // Sort days ascending
     const daysAsc = timeline.sort((a: any, b: any) => (a.day || '').localeCompare(b.day || ''));
 
-    // Build labels and extract relays/compute units data
     const labels: string[] = [];
     const relaysDaily: number[] = [];
     const claimedCUDaily: number[] = [];
@@ -1097,47 +1203,38 @@ async function loadNetworkGrowthPerformance(windowDays: number = 7) {
     for (const dayItem of daysAsc) {
       const dayStr = (dayItem.day || '').slice(0, 10);
       if (!dayStr) continue;
-      
       const d = new Date(dayStr + 'T00:00:00Z');
       labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-      relaysDaily.push(Number(dayItem.relays || 0));
+      relaysDaily.push(Number(dayItem.estimated_relays || 0));
       claimedCUDaily.push(Number(dayItem.claimed_compute_units || 0));
       estimatedCUDaily.push(Number(dayItem.estimated_compute_units || 0));
     }
 
-    // For the selected window, replace the last day's estimated CU with the
-    // average estimated CU over the window to smooth the most recent point
     if (estimatedCUDaily.length > 0) {
       const sumEstimated = estimatedCUDaily.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
       const avgEstimated = sumEstimated / estimatedCUDaily.length;
       estimatedCUDaily[estimatedCUDaily.length - 1] = avgEstimated;
     }
 
-    // Update chart categories (only if not already set or if this is the first data loaded)
     if (chartCategories.value.length === 0 || chartCategories.value.length === labels.length) {
       chartCategories.value = labels;
     }
 
-    // Update performance series (relays, claimed CU, and estimated CU)
     historicalData.value.series[4].data = relaysDaily as never[];
     historicalData.value.series[5].data = claimedCUDaily as never[];
     historicalData.value.series[6].data = estimatedCUDaily as never[];
   } catch (e) {
     console.error('Error loading network growth performance:', e);
-    // Don't throw - allow entities to still load if performance fails
   }
 }
 
-// Reload network growth data when the selected window changes
 watch(networkGrowthWindow, (newVal, oldVal) => {
   if (newVal === oldVal) return;
-  // Clear existing data to show loading state if needed
   chartCategories.value = [];
   historicalData.value.series = historicalData.value.series.map(series => ({
     ...series,
     data: []
   }));
-
   Promise.allSettled([
     loadNetworkGrowthPerformance(newVal),
     loadNetworkGrowthEntities(newVal)
@@ -1146,27 +1243,18 @@ watch(networkGrowthWindow, (newVal, oldVal) => {
   });
 });
 
-// Load entity statistics (applications, suppliers, gateways, services) from entities endpoint
 async function loadNetworkGrowthEntities(windowDays: number = 7) {
   try {
     const params = new URLSearchParams();
     params.append('window', String(windowDays));
     params.append('chain', apiChainName.value);
-
     const response = await fetch(`/api/v1/network-growth/entities?${params.toString()}`);
     const result = await response.json();
-
-    if (!response.ok) {
-      console.error('Error loading network growth entities:', result);
-      throw new Error('Network growth entities API error');
-    }
+    if (!response.ok) throw new Error('Network growth entities API error');
 
     const timeline = result?.data?.timeline || [];
-
-    // Sort days ascending
     const daysAsc = timeline.sort((a: any, b: any) => (a.day || '').localeCompare(b.day || ''));
 
-    // Build labels and extract entity data
     const labels: string[] = [];
     const applicationsDaily: number[] = [];
     const suppliersDaily: number[] = [];
@@ -1176,7 +1264,6 @@ async function loadNetworkGrowthEntities(windowDays: number = 7) {
     for (const dayItem of daysAsc) {
       const dayStr = (dayItem.day || '').slice(0, 10);
       if (!dayStr) continue;
-      
       const d = new Date(dayStr + 'T00:00:00Z');
       labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
       applicationsDaily.push(Number(dayItem.applications || 0));
@@ -1185,13 +1272,11 @@ async function loadNetworkGrowthEntities(windowDays: number = 7) {
       servicesDaily.push(Number(dayItem.services || 0));
     }
 
-    // Current totals from node
     const totalApps = Number(networkStats.value.applications || 0);
     const totalSuppliers = Number(networkStats.value.suppliers || 0);
     const totalGateways = Number(networkStats.value.gateways || 0);
     const totalServices = Number(networkStats.value.services || 0);
 
-    // Helper to build cumulative series that ends at current total
     const toCumulative = (daily: number[], currentTotal: number) => {
       const sumDaily = daily.reduce((a, b) => a + (Number(b) || 0), 0);
       let startValue = Math.max(0, currentTotal - sumDaily);
@@ -1208,24 +1293,20 @@ async function loadNetworkGrowthEntities(windowDays: number = 7) {
     const gateways = toCumulative(gatewaysDaily, totalGateways);
     const services = toCumulative(servicesDaily, totalServices);
 
-    // Update chart categories (only if not already set or if this is the first data loaded)
     if (chartCategories.value.length === 0 || chartCategories.value.length === labels.length) {
       chartCategories.value = labels;
     }
 
-    // Update entity series (applications, gateways, suppliers, services)
     historicalData.value.series[0].data = applications as never[];
     historicalData.value.series[1].data = gateways as never[];
     historicalData.value.series[2].data = suppliers as never[];
     historicalData.value.series[3].data = services as never[];
   } catch (e) {
     console.error('Error loading network growth entities:', e);
-    // Don't throw - allow performance to still load if entities fails
   }
 }
 
 function generateHistoricalData() {
-  // Generate last 7 days
   const days = 7;
   const labels = [];
   const now = new Date();
@@ -1233,50 +1314,34 @@ function generateHistoricalData() {
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    // Format date as "MMM DD" (e.g., "Jan 15")
     labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
   }
 
-  // Set the categories
   chartCategories.value = labels;
 
-  // Generate more visible data with larger values
   const appData = [];
   const supplierData = [];
   const gatewayData = [];
   const serviceData = [];
 
-  // Start with current values and work backwards with more significant changes
-  let appCount = networkStats.value.applications;
-  let supplierCount = networkStats.value.suppliers;
-  let gatewayCount = networkStats.value.gateways;
-  let serviceCount = networkStats.value.services;
+  let appCount = Math.max(networkStats.value.applications, 5);
+  let supplierCount = Math.max(networkStats.value.suppliers, 5);
+  let gatewayCount = Math.max(networkStats.value.gateways, 3);
+  let serviceCount = Math.max(networkStats.value.services, 4);
 
-  // Ensure minimum values for visibility
-  appCount = Math.max(appCount, 5);
-  supplierCount = Math.max(supplierCount, 5);
-  gatewayCount = Math.max(gatewayCount, 3);
-  serviceCount = Math.max(serviceCount, 4);
-
-  // Create data points
   for (let i = 0; i < days; i++) {
-    // For the first day (oldest), start with lower values
     if (i === 0) {
       appData.push(Math.max(1, Math.floor(appCount * 0.6)));
       supplierData.push(Math.max(1, Math.floor(supplierCount * 0.7)));
       gatewayData.push(Math.max(1, Math.floor(gatewayCount * 0.5)));
       serviceData.push(Math.max(1, Math.floor(serviceCount * 0.4)));
-    }
-    // For middle days, show gradual growth
-    else if (i < days - 1) {
+    } else if (i < days - 1) {
       const growthFactor = 0.7 + (i * 0.05);
       appData.push(Math.max(1, Math.floor(appCount * growthFactor)));
       supplierData.push(Math.max(1, Math.floor(supplierCount * growthFactor)));
       gatewayData.push(Math.max(1, Math.floor(gatewayCount * growthFactor)));
       serviceData.push(Math.max(1, Math.floor(serviceCount * growthFactor)));
-    }
-    // For the last day (today), use current values
-    else {
+    } else {
       appData.push(appCount);
       supplierData.push(supplierCount);
       gatewayData.push(gatewayCount);
@@ -1284,7 +1349,6 @@ function generateHistoricalData() {
     }
   }
 
-  // Update the series data
   historicalData.value.series[0].data = appData as never[];
   historicalData.value.series[1].data = supplierData as never[];
   historicalData.value.series[2].data = gatewayData as never[];
@@ -1297,10 +1361,7 @@ function updateTxChartForWindow(windowDays: number) {
 
   if (!labels.length || !counts.length) {
     txChartCategories.value = [];
-    txChartSeries.value = [{
-      name: 'Transactions',
-      data: []
-    }];
+    txChartSeries.value = [{ name: 'Transactions', data: [] }];
     return;
   }
 
@@ -1317,25 +1378,19 @@ function updateTxChartForWindow(windowDays: number) {
 
 async function loadTransactionHistory() {
   try {
-    // Fetch historical transaction data using the transactions/count endpoint with chain parameter
     const currentChain = blockchain.current?.chainName || props.chain || 'pocket-lego-testnet';
-    const apiChainName = getApiChainName(currentChain);
-    const historyPromise = fetch(`/api/v1/transactions/count?chain=${apiChainName}`).catch(err => {
+    const apiChainNameVal = getApiChainName(currentChain);
+    const historyPromise = fetch(`/api/v1/transactions/count?chain=${apiChainNameVal}`).catch(err => {
       console.error("Error fetching transaction history:", err);
       return null;
     });
 
-    // Process history response
     const historyResponse = await historyPromise;
 
     if (historyResponse && historyResponse.ok) {
       const historyData = await historyResponse.json();
-
       if (historyData.data && historyData.data.labels && historyData.data.counts) {
-        // Store the total transaction count
         transactionStats.value.total = historyData.data.total || 0;
-
-        // Cache full history and then apply windowing on the frontend
         fullTxHistoryLabels.value = historyData.data.labels || [];
         fullTxHistoryCounts.value = historyData.data.counts || [];
         updateTxChartForWindow(txHistoryWindow.value);
@@ -1353,7 +1408,6 @@ async function loadTransactionHistory() {
   }
 }
 
-// Fallback method if the API request fails
 function fallbackToClientSideProcessing(windowDays: number = 30) {
   const txs = base.allTxs || [];
   const days = windowDays;
@@ -1361,25 +1415,19 @@ function fallbackToClientSideProcessing(windowDays: number = 30) {
   const labels = [];
   const txsByDay = new Map();
 
-  // Generate labels and initialize counts
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    // Format date as "MMM D" (e.g., "Feb 3")
     labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-
-    const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const dateKey = date.toISOString().split('T')[0];
     txsByDay.set(dateKey, 0);
   }
 
-  // Count transactions by day
   for (const tx of txs) {
     let txDate;
-
     if (tx.timestamp) {
       txDate = new Date(tx.timestamp);
     } else if (tx.height) {
-      // Try to get timestamp from block
       const cachedBlock = base._blockCache?.get(tx.height);
       if (cachedBlock && cachedBlock.block.header.time) {
         txDate = new Date(cachedBlock.block.header.time);
@@ -1390,7 +1438,6 @@ function fallbackToClientSideProcessing(windowDays: number = 30) {
         }
       }
     }
-
     if (txDate) {
       const dateKey = txDate.toISOString().split('T')[0];
       if (txsByDay.has(dateKey)) {
@@ -1399,7 +1446,6 @@ function fallbackToClientSideProcessing(windowDays: number = 30) {
     }
   }
 
-  // Convert to array for chart
   const txData = [];
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
@@ -1408,13 +1454,11 @@ function fallbackToClientSideProcessing(windowDays: number = 30) {
     txData.push(txsByDay.get(dateKey) || 0);
   }
 
-  // Cache full history derived from client-side processing and apply windowing
   fullTxHistoryLabels.value = labels;
   fullTxHistoryCounts.value = txData;
   updateTxChartForWindow(txHistoryWindow.value);
 }
 
-// Also add a watcher to reload transaction history when allTxs changes
 watch(() => base.allTxs, (newTxs) => {
   if (newTxs && newTxs.length > 0) {
     console.log(`Transaction data updated, reloading chart with ${newTxs.length} transactions`);
@@ -1422,74 +1466,49 @@ watch(() => base.allTxs, (newTxs) => {
   }
 }, { deep: true });
 
-// Reload transaction history when the selected window changes
 watch(txHistoryWindow, (newVal, oldVal) => {
   if (newVal === oldVal) return;
   updateTxChartForWindow(newVal);
 });
 
-// Add this to clean up event listeners
 onBeforeUnmount(() => {
   if (blockTableContainer.value) {
     blockTableContainer.value.removeEventListener('scroll', handleBlockScroll);
   }
-
-  if (txTableContainer.value) {
-    txTableContainer.value.removeEventListener('scroll', handleTxScroll);
-  }
-
-  if (blockScrollTimeout.value) {
-    clearTimeout(blockScrollTimeout.value);
-  }
-
-  if (txScrollTimeout.value) {
-    clearTimeout(txScrollTimeout.value);
-  }
-
-  if (updateNetworkStatsTimeout.value) {
-    clearTimeout(updateNetworkStatsTimeout.value);
-  }
-
-  if (indexerHealthInterval.value) {
-    clearInterval(indexerHealthInterval.value);
-  }
+  if (blockScrollTimeout.value) clearTimeout(blockScrollTimeout.value);
+  if (updateNetworkStatsTimeout.value) clearTimeout(updateNetworkStatsTimeout.value);
+  if (indexerHealthInterval.value) clearInterval(indexerHealthInterval.value);
 });
 
-// Add watchers to update virtual lists when data changes
 watch(() => base.recents.length, () => {
   updateVisibleBlocks();
 });
 
-watch(() => base.allTxs.length, () => {
-  updateVisibleTxs();
-});
 
-// Add watchers for network status data to trigger updates when dependencies change
 watch(() => base.latest?.block?.header?.height, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) {
     debouncedUpdateNetworkStats();
+    // Also keep the dashboard \"Latest Blocks\" table fresh by inserting the newest block at the top
+    tryPrependLatestBlockToDashboard();
   }
 });
 
 watch(() => base.blocktime, (newVal, oldVal) => {
   if (newVal && newVal !== oldVal) {
-    // Update computed property will automatically update
     console.log("Block time changed, updating network stats");
   }
 });
 
-// Convert seconds → "Xs" or "Xm Ys" without decimal in seconds
+// Convert seconds → "Xs" or "Xm Ys"
 function formatBlockTime(secondsStr?: string | number) {
   if (!secondsStr) return '0s'
   const totalSeconds = typeof secondsStr === 'string' ? parseFloat(secondsStr) : secondsStr
-
   if (totalSeconds < 60) {
-    return `${Math.round(totalSeconds)}s` // sirf seconds, rounded
+    return `${Math.round(totalSeconds)}s`
   }
-
   const minutes = Math.floor(totalSeconds / 60)
-  const seconds = Math.round(totalSeconds % 60) // seconds rounded to integer
-  return `${minutes}m ${seconds}s` // minutes aur seconds, no decimal
+  const seconds = Math.round(totalSeconds % 60)
+  return `${minutes}m ${seconds}s`
 }
 
 </script>
@@ -1540,7 +1559,7 @@ function formatBlockTime(secondsStr?: string | number) {
                 <Icon icon="mdi:timer-outline" class="text-sm text-[#64748B] mr-1" />
                 <span class="text-xs text-secondary">Avg Block Time (24h)</span>
               </div>
-              <div class="text-xl text-main flex items-center justify-center font-medium"> {{ avgBlockProductionTime || 0  }}s
+              <div class="text-xl text-main flex items-center justify-center font-medium"> {{ avgBlockProductionTime !== null ? formatBlockTime(avgBlockProductionTime) : '-' }}
               </div>
             </div>
           </div>
@@ -1593,7 +1612,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     <span class="text-[12px] text-secondary ml-1">({{ store.coinInfo?.symbol?.toUpperCase() || '' }})</span>
                   </div>
                   <div class="text-xl text-main flex items-center justify-center font-medium"> {{format.formatNumber((store.coinInfo?.market_data?.circulating_supply || 0), '123,456,789.[]') }}
-                    <!-- <span class="text-sm font-medium"></span> -->
                   </div>
                 </div>
               </div>
@@ -1643,11 +1661,7 @@ function formatBlockTime(secondsStr?: string | number) {
              dark:from-[#1f3fbf] dark:via-[#2447d6] dark:to-[#1a2f8f]
              shadow-lg hover:shadow-xl transition-all duration-300
              ">
-              <!-- Logo -->
               <img src="https://pocket.network/wp-content/uploads/2025/01/logo-white.png" alt="Coin logo" class="w-2/3 justify-self-center" />
-              <!-- <img v-else src="https://pocket.network/wp-content/uploads/2024/12/logo.png" alt="Coin logo" class="w-2/3 justify-self-center" /> -->
-
-              <!-- Price -->
               <div class="flex flex-col item-center mx-auto">
                 <div class="text-xl text-center text-[#ffffff]">
                   ${{ store.coinInfo?.market_data?.current_price?.usd?.toFixed(6) || '0.00' }}
@@ -1657,8 +1671,6 @@ function formatBlockTime(secondsStr?: string | number) {
                   {{ (store.coinInfo?.market_data?.price_change_percentage_24h || 0) > 0 ? '+' : '' }} {{store.coinInfo?.market_data?.price_change_percentage_24h?.toFixed(2) || '0.00' }}%
                 </div>
               </div>
-
-              <!-- Buy Button -->
               <a class="!text-[#000000] btn btn-sm w-full !bg-[#ffd60a] !border-[#ffd60a]"
                 :class="{ '!btn-[#60BC29]': store.trustColor === 'green', '!btn-warning': store.trustColor === 'yellow' }"
                 :href="ticker?.trade_url" target="_blank">
@@ -1673,11 +1685,9 @@ function formatBlockTime(secondsStr?: string | number) {
       <div class="flex mt-4 mb-2 w-full flex-col lg:flex-row gap-4 bg-base-100 dark:bg-[#1a1f26]">  
         <!-- Mobile / Tablet view -->
         <div class="mobile-home">
-          <!-- Network Status -->
           <div class="p-2 w-full lg:w-2/3">
             <div class="text-lg font-semibold text-main">Network Status</div>
               <div class="grid grid-cols-1 lg:grid-cols-3 gap-2 my-2">
-                <!-- Current Block Height -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex items-center mb-5">
                     <Icon icon="mdi:cube-scan" class="text-sm max-[1024px]:text-[8px] max-[1024px]:font-bold text-[#64748B] mr-1" />
@@ -1690,8 +1700,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     </a>
                   </div>
                 </div>
-
-                <!-- Consensus Nodes -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:server-network" class="text-sm max-[1024px]:text-[8px] max-[1024px]:font-bold text-[#64748B] mr-1" />
@@ -1701,22 +1709,18 @@ function formatBlockTime(secondsStr?: string | number) {
                     {{ paramStore.nodeVersion?.items?.length || '0' }}
                   </div>
                 </div>
-
-                <!-- Avg Block Time (24) -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:timer-outline" class="text-sm max-[1024px]:text-[8px] max-[1024px]:font-bold text-[#64748B] mr-1" />
                     <span class="text-[10px] max-[1024px]:text-[8px] max-[1024px]:font-bold text-secondary">Avg Block Time (24h)</span>
                   </div>
                   <div class="text-xl max-[1024px]:text-xs text-main flex items-center justify-center font-medium">
-                    {{ avgBlockProductionTime || 0 }}s
+                    {{ avgBlockProductionTime !== null ? formatBlockTime(avgBlockProductionTime) : '-' }}
                   </div>
                 </div>
               </div>
 
               <div class="flex gap-2 flex-col md:flex-row">
-
-                <!-- Latest Block Time -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:clock-outline" class="text-sm max-[1024px]:text-[8px] max-[1024px]:font-bold text-[#64748B] mr-1" />
@@ -1726,8 +1730,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     {{ latestBlockTime }}
                   </div>
                 </div>
-
-                <!-- Avg TX Per Block (24h) -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:chart-box-outline" class="text-sm max-[1024px]:text-[8px] max-[1024px]:font-bold text-[#64748B] mr-1" />
@@ -1743,12 +1745,10 @@ function formatBlockTime(secondsStr?: string | number) {
 
         <!-- Mobile / Tablet view -->
         <div class="mobile-home">
-          <!-- Market Data -->
           <div class="p-2 w-full lg:w-1/3">
             <div class="text-lg font-semibold text-main">Market Data</div>
             <div class="flex flex-col lg:flex-row gap-2">
               <div class="grid grid-cols-1 lg:grid-cols-3 gap-2 my-2 w-full">
-                <!-- 24h Volume -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:swap-horizontal" class="text-sm mr-1 text-[#64748B]" />
@@ -1758,8 +1758,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     ${{ format.formatNumber((store.coinInfo?.market_data?.total_volume?.usd || 0), '123,456,789.[00]') }}
                   </div>
                 </div>
-
-                <!-- Market Cap -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:chart-pie" class="text-sm mr-1 text-[#64748B]" />
@@ -1769,8 +1767,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     ${{ format.formatNumber(store.coinInfo?.market_data?.market_cap?.usd || 0, '123,456,789.[00]') }}
                   </div>
                 </div>
-
-                <!-- Circulating Supply -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center gap-1">
                     <Icon icon="mdi:coins" class="text-sm mr-1 text-[#64748B]" />
@@ -1781,8 +1777,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     {{ format.formatNumber((store.coinInfo?.market_data?.circulating_supply || 0), '123,456,789.[]') }}
                   </div>
                 </div>
-
-                <!-- 24h High/Low -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:trophy" class="text-sm mr-1 text-[#64748B]" />
@@ -1793,8 +1787,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     <span class="text-xs text-[#EE6161]">${{ store.coinInfo?.market_data?.low_24h?.usd?.toFixed(6) || '0.00' }}</span>
                   </div>
                 </div>
-
-                <!-- All Time High -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center">
                     <Icon icon="mdi:trending-up" class=" text-sm mr-1 text-[#64748B]" />
@@ -1808,8 +1800,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     ${{ store.coinInfo?.market_data?.ath?.usd?.toFixed(6) || '0.00' }}
                   </div>
                 </div>
-
-                <!-- All Time Low -->
                 <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-1 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
                   <div class="flex mb-5 items-center justify-evenly">
                     <Icon icon="mdi:trending-down" class="text-sm mr-1 text-[#64748B]" />
@@ -1823,16 +1813,10 @@ function formatBlockTime(secondsStr?: string | number) {
                     ${{ store.coinInfo?.market_data?.atl?.usd?.toFixed(6) || '0.00' }}
                   </div>
                 </div>
-
-                <!-- Logo + Price + Buy Button -->
                 <div class="flex flex-col w-full gap-2 p-3 mt-3 rounded-xl justify-center items-center  bg-gradient-to-br from-[#1f3fbf] via-[#2447d6] to-[#1a2f8f]
                     dark:from-[#1f3fbf] dark:via-[#2447d6] dark:to-[#1a2f8f]
                     shadow-lg hover:shadow-xl transition-all duration-300">
-                  <img
-                    src="https://pocket.network/wp-content/uploads/2025/01/logo-white.png"
-                    alt="Coin logo" class="w-24" 
-                  />
-
+                  <img src="https://pocket.network/wp-content/uploads/2025/01/logo-white.png" alt="Coin logo" class="w-24" />
                   <div class="text-sm text-center text-[#ffffff]">
                     ${{ store.coinInfo?.market_data?.current_price?.usd?.toFixed(6) || '0.00' }}
                   </div>
@@ -1841,7 +1825,6 @@ function formatBlockTime(secondsStr?: string | number) {
                     {{ (store.coinInfo?.market_data?.price_change_percentage_24h || 0) > 0 ? '+' : '' }}
                     {{ store.coinInfo?.market_data?.price_change_percentage_24h?.toFixed(2) || '0.00' }}%
                   </div>
-
                   <a class="!text-white btn btn-sm w-full !bg-[#ffd60a] !border-[#ffd60a]"
                     :href="ticker?.trade_url" target="_blank">
                     {{ $t('index.buy') }} {{ store.coinInfo?.symbol?.toUpperCase() || 'COIN' }}
@@ -1854,16 +1837,13 @@ function formatBlockTime(secondsStr?: string | number) {
       </div>
 
     <!-- Network Statistics Section -->
-
-    <!-- Network Statistics -->
     <div class="bg-base-100 dark:bg-[#1a1f26] pt-3 pb-4 mt-2">
       <div class="flex items-center mb-4">
         <div class="text-lg font-semibold text-main">Network Statistics</div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-8 gap-4">
-        <!-- Total Wallets -->
-         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:wallet" class="text-sm mr-1 text-secondary" />
             <span class="text-xs text-secondary">Total Wallets</span>
@@ -1871,8 +1851,6 @@ function formatBlockTime(secondsStr?: string | number) {
           <div class="text-xl text-main flex items-center justify-center font-medium"> {{ networkStats.wallets.toLocaleString() }}
           </div>
         </div>
-
-        <!-- Applications -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:apps" class="text-sm mr-1 text-secondary" />
@@ -1882,8 +1860,6 @@ function formatBlockTime(secondsStr?: string | number) {
             {{ networkStats.applications.toLocaleString() }}
           </div>
         </div>
-
-        <!-- Suppliers -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:package-variant" class="text-sm mr-1 text-secondary" />
@@ -1893,8 +1869,6 @@ function formatBlockTime(secondsStr?: string | number) {
             {{ networkStats.suppliers.toLocaleString() }}
           </div>
         </div>
-
-        <!-- Gateways -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:gate" class="text-sm mr-1 text-secondary" />
@@ -1904,8 +1878,6 @@ function formatBlockTime(secondsStr?: string | number) {
             {{ networkStats.gateways.toLocaleString() }}
           </div>
         </div>
-
-        <!-- Services -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:handshake" class="text-sm mr-1 text-secondary" />
@@ -1915,19 +1887,15 @@ function formatBlockTime(secondsStr?: string | number) {
             {{ networkStats.services.toLocaleString() }}
           </div>
         </div>
-
-        <!-- Relays (24h) -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:network" class="text-sm mr-1 text-secondary" />
             <span class="text-xs text-secondary">Relays (24h)</span>
           </div>
           <div class="text-xl text-main flex items-center justify-center font-medium">
-            {{ formatWithCommas(totalRelays24h) }}
+            {{ formatCompact(totalRelays24h) }}
           </div>
         </div>
-
-        <!-- Compute Units (24h) -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:cpu-64-bit" class="text-sm mr-1 text-secondary" />
@@ -1937,8 +1905,6 @@ function formatBlockTime(secondsStr?: string | number) {
             {{ formatCompact(totalComputeUnits24h) }}
           </div>
         </div>
-
-        <!-- Active Validators -->
         <div class="flex flex-col bg-[#ffffff] hover:bg-base-200 w-full px-2 py-4 rounded-xl justify-center items-center shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
           <div class="flex mb-5 items-center">
             <Icon icon="mdi:shield-check" class="text-sm mr-1 text-secondary" />
@@ -1948,18 +1914,16 @@ function formatBlockTime(secondsStr?: string | number) {
             {{ activeValidatorsCount }}
           </div>
         </div>
-
       </div>
     </div>
 
-    <!-- Governance Section - Active Proposals -->
+    <!-- Governance Section -->
     <div v-if="blockchain.supportModule('governance')"
       class="bg-base-100 px-4 pt-3 pb-4 rounded-md shadow-md border-t-4 border-accent">
       <div class="flex items-center mb-4">
         <Icon icon="mdi:gavel" class="text-2xl text-accent mr-2" />
         <div class="text-lg font-semibold text-main">Active Proposals</div>
       </div>
-
       <div class="pb-4">
         <ProposalListItem :proposals="store?.proposals" />
       </div>
@@ -1969,47 +1933,26 @@ function formatBlockTime(secondsStr?: string | number) {
       </div>
     </div>
 
-
     <!-- Charts Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
       <!-- Network Growth Chart -->
       <div class="bg-base-200 pt-3 rounded-lg hover:bg-base-300 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
-        <div class="flex items-center justify-between mb-4 px-5 gap-4">
-          <div class="flex flex-1 items-center gap-4 justify-between">
+        <div class="main-network-growth-chart items-center justify-between mb-4 px-5 gap-4">
+          <div class="main-network-growth-chart-child items-center w-full justify-between gap-4">
             <div class="flex text-lg font-semibold text-main">Network Growth</div>
-            <!-- Tabs -->
-            <div class="flex tabs tabs-boxed bg-base-200 dark:bg-base-300">
-              <button
-                @click="networkGrowthTab = 'performance'"
-                :class="[
-                  'tab',
-                  networkGrowthTab === 'performance' ? 'tab-active bg-[#09279F] text-white' : ''
-                ]">
-                Performance
-              </button>
-              <button
-                @click="networkGrowthTab = 'core-services'"
-                :class="[
-                  'tab',
-                  networkGrowthTab === 'core-services' ? 'tab-active bg-[#09279F] text-white' : ''
-                ]">
-                Services
-              </button>
+            <div class="flex items-center tabs tabs-boxed bg-base-200 dark:bg-base-300">
+              <button @click="networkGrowthTab = 'performance'" :class="['tab', networkGrowthTab === 'performance' ? 'tab-active bg-[#09279F] text-white' : '']">Performance</button>
+              <button @click="networkGrowthTab = 'core-services'" :class="['tab', networkGrowthTab === 'core-services' ? 'tab-active bg-[#09279F] text-white' : '']">Services</button>
             </div>
           </div>
-          <!-- Window selector -->
           <div class="flex items-center gap-2">
             <span class="text-xs text-secondary">Window</span>
-            <select
-              v-model.number="networkGrowthWindow"
-              class="select select-xs select-bordered bg-base-100 dark:bg-base-200 text-xs"
-            >
+            <select v-model.number="networkGrowthWindow" class="select select-xs select-bordered bg-base-100 dark:bg-base-200 text-xs">
               <option :value="7">7d</option>
               <option :value="15">15d</option>
             </select>
           </div>
         </div>
-        
         <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md relative">
           <div class="h-80">
             <ApexCharts 
@@ -2025,68 +1968,18 @@ function formatBlockTime(secondsStr?: string | number) {
               <span class="ml-2 text-secondary">Loading chart data...</span>
             </div>
           </div>
-          <!-- Performance Metric Selector - Bottom Left (only shown when Performance tab is active) -->
           <div v-if="networkGrowthTab === 'performance'" class="absolute bottom-2 left-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
-            <button
-              @click="performanceMetric = 'compute-units'"
-              :class="[
-                'tab',
-                performanceMetric === 'compute-units' 
-                  ? 'tab-active bg-[#EF4444] text-white' 
-                  : 'hover:bg-base-300'
-              ]"
-              title="Compute Units">
-              <Icon icon="mdi:cpu-64-bit" class="text-sm mr-1" />
-              Compute Units
+            <button @click="performanceMetric = 'compute-units'" :class="['tab', performanceMetric === 'compute-units' ? 'tab-active bg-[#EF4444] text-white' : 'hover:bg-base-300']" title="Compute Units">
+              <Icon icon="mdi:cpu-64-bit" class="text-sm mr-1" />Compute Units
             </button>
-            <button
-              @click="performanceMetric = 'relays'"
-              :class="[
-                'tab',
-                performanceMetric === 'relays' 
-                  ? 'tab-active bg-[#A855F7] text-white' 
-                  : 'hover:bg-base-300'
-              ]"
-              title="Relays">
-              <Icon icon="mdi:network" class="text-sm mr-1" />
-              Relays
+            <button @click="performanceMetric = 'relays'" :class="['tab', performanceMetric === 'relays' ? 'tab-active bg-[#A855F7] text-white' : 'hover:bg-base-300']" title="Relays">
+              <Icon icon="mdi:network" class="text-sm mr-1" />Relays
             </button>
           </div>
-          <!-- Chart Type Selector - Bottom Right -->
           <div class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
-            <button
-              @click="networkGrowthChartType = 'bar'"
-              :class="[
-                'tab',
-                networkGrowthChartType === 'bar' 
-                  ? 'tab-active bg-[#09279F] text-white' 
-                  : ''
-              ]"
-              title="Bar Chart">
-              <Icon icon="mdi:chart-bar" class="text-sm" />
-            </button>
-            <button
-              @click="networkGrowthChartType = 'area'"
-              :class="[
-                'tab',
-                networkGrowthChartType === 'area' 
-                  ? 'tab-active bg-[#09279F] text-white' 
-                  : ''
-              ]"
-              title="Area Chart">
-              <Icon icon="mdi:chart-areaspline" class="text-sm" />
-            </button>
-            <button
-              @click="networkGrowthChartType = 'line'"
-              :class="[
-                'tab',
-                networkGrowthChartType === 'line' 
-                  ? 'tab-active bg-[#09279F] text-white' 
-                  : ''
-              ]"
-              title="Line Chart">
-              <Icon icon="mdi:chart-line" class="text-sm" />
-            </button>
+            <button @click="networkGrowthChartType = 'bar'" :class="['tab', networkGrowthChartType === 'bar' ? 'tab-active bg-[#09279F] text-white' : '']" title="Bar Chart"><Icon icon="mdi:chart-bar" class="text-sm" /></button>
+            <button @click="networkGrowthChartType = 'area'" :class="['tab', networkGrowthChartType === 'area' ? 'tab-active bg-[#09279F] text-white' : '']" title="Area Chart"><Icon icon="mdi:chart-areaspline" class="text-sm" /></button>
+            <button @click="networkGrowthChartType = 'line'" :class="['tab', networkGrowthChartType === 'line' ? 'tab-active bg-[#09279F] text-white' : '']" title="Line Chart"><Icon icon="mdi:chart-line" class="text-sm" /></button>
           </div>
         </div>
       </div>
@@ -2095,16 +1988,11 @@ function formatBlockTime(secondsStr?: string | number) {
       <div class="bg-base-200 pt-3 rounded-lg hover:bg-base-300 shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <div class="flex items-center justify-between mb-4 px-5">
           <div class="flex items-center">
-            <!-- <Icon icon="mdi:chart-timeline-variant" class="text-2xl text-warning mr-2" /> -->
             <div class="text-lg font-semibold text-main">Transaction History</div>
           </div>
-          <!-- Window selector -->
           <div class="flex items-center gap-2">
             <span class="text-xs text-secondary">Window</span>
-            <select
-              v-model.number="txHistoryWindow"
-              class="select select-xs select-bordered bg-base-100 dark:bg-base-200 text-xs"
-            >
+            <select v-model.number="txHistoryWindow" class="select select-xs select-bordered bg-base-100 dark:bg-base-200 text-xs">
               <option :value="7">7d</option>
               <option :value="15">15d</option>
               <option :value="30">1m</option>
@@ -2113,49 +2001,12 @@ function formatBlockTime(secondsStr?: string | number) {
         </div>
         <div class="dark:bg-base-200 bg-base-100 p-4 rounded-md relative">
           <div class="h-80">
-            <ApexCharts 
-              :type="txChartType" 
-              height="280" 
-              :options="txChartOptions" 
-              :series="txChartSeries" 
-              :key="`tx-${txChartType}`"
-            />
+            <ApexCharts :type="txChartType" height="280" :options="txChartOptions" :series="txChartSeries" :key="`tx-${txChartType}`" />
           </div>
-          <!-- Chart Type Selector - Bottom Right -->
           <div class="absolute bottom-2 right-2 tabs tabs-boxed bg-base-200 dark:bg-base-300">
-            <button
-              @click="txChartType = 'bar'"
-              :class="[
-                'tab',
-                txChartType === 'bar' 
-                  ? 'tab-active bg-[#09279F] text-white' 
-                  : ''
-              ]"
-              title="Bar Chart">
-              <Icon icon="mdi:chart-bar" class="text-sm" />
-            </button>
-            <button
-              @click="txChartType = 'area'"
-              :class="[
-                'tab',
-                txChartType === 'area' 
-                  ? 'tab-active bg-[#09279F] text-white' 
-                  : ''
-              ]"
-              title="Area Chart">
-              <Icon icon="mdi:chart-areaspline" class="text-sm" />
-            </button>
-            <button
-              @click="txChartType = 'line'"
-              :class="[
-                'tab',
-                txChartType === 'line' 
-                  ? 'tab-active bg-[#09279F] text-white' 
-                  : ''
-              ]"
-              title="Line Chart">
-              <Icon icon="mdi:chart-line" class="text-sm" />
-            </button>
+            <button @click="txChartType = 'bar'" :class="['tab', txChartType === 'bar' ? 'tab-active bg-[#09279F] text-white' : '']" title="Bar Chart"><Icon icon="mdi:chart-bar" class="text-sm" /></button>
+            <button @click="txChartType = 'area'" :class="['tab', txChartType === 'area' ? 'tab-active bg-[#09279F] text-white' : '']" title="Area Chart"><Icon icon="mdi:chart-areaspline" class="text-sm" /></button>
+            <button @click="txChartType = 'line'" :class="['tab', txChartType === 'line' ? 'tab-active bg-[#09279F] text-white' : '']" title="Line Chart"><Icon icon="mdi:chart-line" class="text-sm" /></button>
           </div>
         </div>
       </div>
@@ -2163,11 +2014,10 @@ function formatBlockTime(secondsStr?: string | number) {
 
     <!-- Tables Section -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
-      <!-- Blocks Table -->
+      <!--  Blocks Table - Ab auto prepend hoga naye block aane par -->
       <div class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-5 rounded-lg shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center">
-            <!-- <Icon icon="mdi:cube-outline" class="text-2xl text-info mr-2" /> -->
             <div class="text-lg font-semibold text-main ml-5">Latest Blocks</div>
           </div>
           <RouterLink :to="`/${chain}/blocks`"
@@ -2177,7 +2027,7 @@ function formatBlockTime(secondsStr?: string | number) {
           </RouterLink>
         </div>
 
-        <!-- 🔴 Fallback Warning Banner for Blocks -->
+        <!--  Fallback Warning Banner for Blocks -->
         <div
           v-if="isBlocksNodeFallback"
           :class="blocksFallbackError ? 'bg-red-100 border-red-400 text-red-700' : 'bg-yellow-100 border-yellow-400 text-yellow-700'"
@@ -2187,7 +2037,7 @@ function formatBlockTime(secondsStr?: string | number) {
           <div class="flex items-center">
             <Icon :icon="blocksFallbackError ? 'mdi:alert-octagon' : 'mdi:alert-circle'" class="mr-2 text-lg" />
             <span class="text-sm font-medium">
-              <span v-if="!blocksFallbackError">Currently showing data from node because main server is down.</span>
+              <span v-if="!blocksFallbackError">Our system is temporarily under maintenance. You’re currently viewing live data from an alternative source.</span>
               <span v-else>Unable to load blocks: {{ blocksFallbackError }}</span>
             </span>
           </div>
@@ -2197,7 +2047,7 @@ function formatBlockTime(secondsStr?: string | number) {
           <table class="table table-compact w-full bg-base-200">
             <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
               <tr class="border-none bg-base-200">
-                <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('block.block_header') }}</th>
+                <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('block.block') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('account.hash') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('block.proposer') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('module.tx') }}</th>
@@ -2205,38 +2055,50 @@ function formatBlockTime(secondsStr?: string | number) {
                 <th class="dark:bg-[rgba(255,255,255,.03)] bg-base-200">{{ $t('account.production_time') }}</th>
               </tr>  
             </thead>
-            <tbody v-if="loadingBlocks" >
-            <tr class="text-center">
-              <td colspan="5" class="py-8">
-                <div class="flex justify-center items-center">
-                  <div class="loading loading-spinner loading-md"></div>
-                  <span class="ml-2">Loading blocks...</span>
-                </div>
-              </td>
-            </tr>
+
+            <tbody v-if="loadingBlocks">
+              <tr class="text-center">
+                <td colspan="6" class="py-8">
+                  <div class="flex justify-center items-center">
+                    <div class="loading loading-spinner loading-md"></div>
+                    <span class="ml-2">Loading blocks...</span>
+                  </div>
+                </td>
+              </tr>
             </tbody>
-            <tbody  v-if="!loadingBlocks && blocks.length > 0">
-              <tr v-for="block in blocks" :key="block.id"
-                class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+
+            <!--  TransitionGroup: naya block smoothly upar se aata hai -->
+            <TransitionGroup
+              v-if="!loadingBlocks && blocks.length > 0"
+              name="block-slide"
+              tag="tbody"
+            >
+              <tr
+                v-for="block in blocks"
+                :key="block.height"
+                class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl"
+              >
                 <td class="font-medium">{{ block.height }}</td>
                 <td class="truncate text-[#153cd8] dark:text-warning" style="max-width: 12rem; overflow:hidden;">
                   <RouterLink class="truncate hover:underline" :title="block.hash"
                     :to="`/${chain}/blocks/${block.height}`">{{ block.hash || block.id.split(":")[1] }}
                   </RouterLink>
                 </td>
-                <td>{{ format.validator(block.proposer) }}</td>
+                <td class="truncate" style="max-width: 8rem; overflow:hidden;">
+                  <span :title="format.validator(block.proposer)" class="truncate">{{ format.validator(block.proposer) }}</span>
+                </td>
                 <td>{{ (block.transaction_count ?? 0).toLocaleString() }}</td>
                 <td class="text-sm">{{ format.toDay(block.timestamp, 'from') }}</td>
-                <td class="">{{ formatBlockTime(block.block_production_time || '0') }}</td>
+                <td class="">{{ formatBlockTime(block.block_production_time) }}</td>
               </tr>
-            </tbody>
+            </TransitionGroup>
+
             <tbody v-else-if="!loadingBlocks && blocks.length === 0">
               <tr>
-                <td colspan="5" class="text-center">No blocks found</td>
+                <td colspan="6" class="text-center">No blocks found</td>
               </tr>
             </tbody>
           </table>
-          
         </div>
       </div>
 
@@ -2244,7 +2106,6 @@ function formatBlockTime(secondsStr?: string | number) {
       <div class="bg-[#ffffff] hover:bg-base-200 pt-3 mb-5 rounded-lg shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center">
-            <!-- <Icon icon="mdi:file-document-outline" class="text-2xl text-black mr-2" /> -->
             <div class="text-lg font-semibold text-main ml-5">{{ $t('module.rtx') }}</div>
           </div>
           <RouterLink :to="`/${chain}/tx`"
@@ -2254,7 +2115,7 @@ function formatBlockTime(secondsStr?: string | number) {
           </RouterLink>
         </div>
 
-        <!-- 🔴 Fallback Warning Banner for Transactions -->
+        <!--  Fallback Warning Banner for Transactions -->
         <div
           v-if="isTxsNodeFallback"
           :class="txsFallbackError ? 'bg-red-100 border-red-400 text-red-700' : 'bg-yellow-100 border-yellow-400 text-yellow-700'"
@@ -2264,16 +2125,16 @@ function formatBlockTime(secondsStr?: string | number) {
           <div class="flex items-center">
             <Icon :icon="txsFallbackError ? 'mdi:alert-octagon' : 'mdi:alert-circle'" class="mr-2 text-lg" />
             <span class="text-sm font-medium">
-              <span v-if="!txsFallbackError">Currently showing data from node because main server is down.</span>
+              <span v-if="!txsFallbackError">Our system is temporarily under maintenance. You’re currently viewing live data from an alternative source.</span>
               <span v-else>Unable to load transactions: {{ txsFallbackError }}</span>
             </span>
           </div>
         </div>
 
-        <div class="bg-base-200 rounded-md overflow-auto" style="height: 30rem;" ref="txTableContainer">
+        <div class="bg-base-200 rounded-md overflow-auto" style="max-height: 30rem;">
           <table class="table table-compact w-full bg-base-200">
             <thead class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200 sticky top-0 border-0">
-              <tr class="border-none">
+              <tr class="border-none bg-base-200">
                 <th class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200">{{ $t('tx.tx_hash') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200">{{ $t('block.block') }}</th>
                 <th class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200">{{ $t('staking.status') }}</th>
@@ -2282,45 +2143,44 @@ function formatBlockTime(secondsStr?: string | number) {
                 <th class="dark:bg-[rgba(255,255,255,.03)]  bg-base-200">{{ $t('account.time') }}</th>
               </tr>
             </thead>
-            <tbody>
-              <!-- Add spacer at the top to push visible content -->
-              <tr v-if="visibleTxs.length > 0" class="h-0 m-0 p-0 border-none">
-                <td :style="{ height: `${visibleTxs[0].index * itemHeight}px`, padding: 0 }" colspan="6"></td>
-              </tr>
+          <!-- Loading state -->
+          <tbody v-if="dashboardTxs.length === 0 && (!base.allTxs || base.allTxs.length === 0)">
+            <tr>
+              <td colspan="6" class="py-8 text-center text-gray-500">No transactions found</td>
+            </tr>
+          </tbody>
 
-              <!-- Render only visible transactions -->
-              <tr v-for="item in visibleTxs" :key="item.index"
-                class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
-                <td class="truncate text-[#153cd8]" style="max-width:10rem">
-                  <RouterLink class="truncate hover:underline" :to="`/${props.chain}/tx/${item.item.hash}`">{{ item.item.hash }}</RouterLink>
-                </td>
-                <td class="text-sm text-[#153cd8]">
-                  <RouterLink :to="`/${props.chain}/blocks/${item.item.block_height}`" class="hover:underline">{{ item.item.block_height }}</RouterLink>
-                </td>
-                <td>
-                  <span class="text-xs truncate py-1 px-3 rounded-full"
-                    :class="(isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'bg-[#60BC29]/10 text-[#60BC29]' : 'bg-[#E03834]/10 text-[#E03834]'">
-                    {{ (isTxsNodeFallback && item.item.status == 0) || item.item.status || item.item.tx_response?.code === 0 ? 'Success' : 'Failed' }}
-                  </span>
-                </td>
-                <td>{{ item.item.type }}</td>
-                <td>{{ format.formatTokens([{ amount: item.item.fee, denom: 'upokt' }]) }} </td>
-                <td class="text-sm">{{ format.toDay(item.item.timestamp, 'from') }}</td>
-              </tr>
-
-              <!-- Add spacer at the bottom to maintain scroll height -->
-              <tr v-if="visibleTxs.length > 0 && base.allTxs.length > 0" class="h-0 m-0 p-0 border-none">
-                <td
-                  :style="{ height: `${Math.max(0, base.allTxs.length - (visibleTxs[visibleTxs.length - 1].index + 1)) * itemHeight}px`, padding: 0 }"
-                  colspan="6"></td>
-              </tr>
-            </tbody>
+          <!-- Direct render - no virtual scroll -->
+          <TransitionGroup
+            v-else
+            name="tx-slide"
+            tag="tbody"
+          >
+            <tr v-for="tx in dashboardTxs" :key="tx.hash"
+              class="hover:bg-gray-100 dark:hover:bg-[#384059] dark:bg-base-200 bg-white border-0 rounded-xl">
+              <td class="truncate text-[#153cd8]" style="max-width:10rem">
+                <RouterLink class="truncate hover:underline" :to="`/${props.chain}/tx/${tx.hash}`">{{ tx.hash }}</RouterLink>
+              </td>
+              <td class="text-sm text-[#153cd8]">
+                <RouterLink :to="`/${props.chain}/blocks/${tx.block_height}`" class="hover:underline">{{ tx.block_height }}</RouterLink>
+              </td>
+              <td>
+                <span class="text-xs truncate py-1 px-3 rounded-full"
+                  :class="(isTxsNodeFallback && tx.status == 0) || tx.status || tx.tx_response?.code === 0 ? 'bg-[#60BC29]/10 text-[#60BC29]' : 'bg-[#E03834]/10 text-[#E03834]'">
+                  {{ (isTxsNodeFallback && tx.status == 0) || tx.status || tx.tx_response?.code === 0 ? 'Success' : 'Failed' }}
+                </span>
+              </td>
+              <td>{{ formatTxType(tx.type) }}</td>
+              <td>{{ format.formatTokens([{ amount: tx.fee, denom: 'upokt' }]) }}</td>
+              <td class="text-sm">{{ format.toDay(tx.timestamp, 'from') }}</td>
+            </tr>
+          </TransitionGroup>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- Node Information Section - Only shown if coingeckoId is not available -->
+    <!-- Node Information Section -->
     <div v-if="!store.coingeckoId"
       class="bg-base-100 px-4 pt-3 pb-4 rounded-md shadow-md border-t-4 border-accent mt-5">
       <div class="flex items-center mb-4">
@@ -2353,12 +2213,30 @@ function formatBlockTime(secondsStr?: string | number) {
   display: block;
 }
 
-/* Media query for desktop */
+.main-network-growth-chart {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-network-growth-chart-child {
+  display: flex;
+  flex-direction:  column;
+}
+
+@media (min-width: 768px) {
+  .main-network-growth-chart {
+    flex-direction: row;
+  }
+
+  .main-network-growth-chart-child {
+    flex-direction: row;
+  }
+}
+
 @media (min-width: 1024px) {
   .desktop-home {
     display: flex;
   }
-
   .mobile-home {
     display: none;
   }
@@ -2376,14 +2254,53 @@ function formatBlockTime(secondsStr?: string | number) {
   border: none;
 }
 
-/* Optimize table rendering */
 .table tbody tr {
   contain: layout style;
 }
 
-/* Fix for better scrolling performance */
 .bg-base-200 {
   will-change: transform;
   transform: translateZ(0);
 }
+
+/*  Naye block ka smooth slide-down animation */
+.block-slide-enter-active {
+  transition: all 0.4s ease;
+}
+.block-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+.block-slide-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/*  Last row fade out */
+.block-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.block-slide-leave-from {
+  opacity: 1;
+}
+.block-slide-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+/*  Baaki rows ka smooth shift */
+.block-slide-move {
+  transition: transform 0.4s ease;
+}
+
+/*  Transaction slide animation */
+.tx-slide-enter-active { transition: all 0.4s ease; }
+.tx-slide-enter-from { opacity: 0; transform: translateY(-12px); }
+.tx-slide-enter-to { opacity: 1; transform: translateY(0); }
+
+.tx-slide-leave-active { transition: all 0.3s ease; }
+.tx-slide-leave-from { opacity: 1; }
+.tx-slide-leave-to { opacity: 0; transform: translateY(8px); }
+
+.tx-slide-move { transition: transform 0.4s ease; }
 </style>

@@ -2,10 +2,10 @@
     "chain_name": "poktroll-mainnet",
     "registry_name": "Poktroll-Mainnet",
     "api": [
-        {"provider": "Poktroll-Mainnet", "address": "https://pocket-mainnet-api.pn.stakenodes.org"}
+        {"provider": "Poktroll-Mainnet", "address": "https://sauron-api.infra.pocket.network"}
     ],
     "rpc": [
-        {"provider": "Poktroll-Mainnet", "address": "https://pocket-mainnet-rpc.pn.stakenodes.org"}
+        {"provider": "Poktroll-Mainnet", "address": "https://sauron-rpc.infra.pocket.network"}
     ],
     "features": ["dashboard", "blocks", "tx", "applications", "suppliers", "gateways", "services", "validators", "parameters"],
     "sdk_version": "0.45.1",

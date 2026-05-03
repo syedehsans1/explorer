@@ -1,10 +1,11 @@
 <script lang="ts" setup>
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { useStakingStore, useBaseStore, useFormatter } from '@/stores'
 import { PageRequest } from '@/types'
 import { useBlockchain } from '@/stores'
 import { Icon } from '@iconify/vue';
 import { useSEO } from '@/composables/useSEO';
+import TablePagination from '@/components/TablePagination.vue'
 
 const props = defineProps(['chain'])
 const tab = ref('blocks')
@@ -78,9 +79,33 @@ interface ApiBlockItem {
   proposer: string
   chain: string
   transaction_count?: number
-  // size?: number
+  // ✅ Server alag alag field names use kar sakta hai
   block_production_time?: number
+  production_time?: number
+  block_time?: number
   raw_block_size?: number
+  size?: number
+  block_size?: number
+}
+
+// ✅ Helper: kisi bhi field name se production time nikalo
+function getProductionTime(block: ApiBlockItem): number {
+  return Number(
+    block.block_production_time ||
+    block.production_time ||
+    block.block_time ||
+    0
+  )
+}
+
+// ✅ Helper: kisi bhi field name se block size nikalo
+function getBlockSize(block: ApiBlockItem): number {
+  return Number(
+    block.raw_block_size ||
+    block.size ||
+    block.block_size ||
+    0
+  )
 }
 
 const getApiChainName = (chainName: string) => {
@@ -109,6 +134,7 @@ const avgBlockProductionTime = ref<number | null>(null)
 const avgBlockSize = ref<number | null>(null)
 
 function updateCurrentBlockProductionTime() {
+  if (!Array.isArray(blocks.value)) return
   const height = currentBlockHeight.value
   // Ensure both values are of the same type for comparison
   const block = blocks.value.find(b => String(b.height) === String(height))
@@ -123,6 +149,105 @@ watch(blocks, () => {
 watch(currentBlockHeight, () => {
   updateCurrentBlockProductionTime()
 })
+
+// Map raw block (base.latest / RPC shape) to ApiBlockItem for table
+// Optionally takes the previous block row so we can derive production time as
+// time(current) - time(previous) in seconds.
+function rawBlockToApiBlockItem(block: any, prev?: ApiBlockItem | null): ApiBlockItem {
+  if (!block?.block?.header) return null as unknown as ApiBlockItem
+  const height = parseInt(block.block.header.height || '0')
+  let blockProductionTime = 0
+
+  const currentTs = block.block?.header?.time
+  const prevTs = prev?.timestamp
+  if (currentTs && prevTs) {
+    const currentMs = new Date(currentTs).getTime()
+    const prevMs = new Date(prevTs).getTime()
+    if (Number.isFinite(currentMs) && Number.isFinite(prevMs) && currentMs > prevMs) {
+      blockProductionTime = (currentMs - prevMs) / 1000
+    }
+  }
+
+  return {
+    id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
+    height,
+    hash: block.block_id?.hash || '',
+    timestamp: block.block?.header?.time || new Date().toISOString(),
+    proposer: block.block?.header?.proposer_address || '',
+    chain: block.block?.header?.chain_id || apiChainName.value,
+    transaction_count: block.block?.data?.txs?.length || 0,
+    block_production_time: blockProductionTime,
+    raw_block_size: 0
+  }
+}
+
+// Prepend latest block to table when on page 1 (called by watcher and poll)
+function tryPrependLatestBlock() {
+  if (loading.value || currentPage.value !== 1 || blocks.value.length === 0) return
+  const latest = base.latest?.block
+  if (!latest?.header?.height) return
+  const latestHeight = Number(latest.header.height)
+  const topHeight = Number(blocks.value[0]?.height)
+  if (Number.isNaN(topHeight) || latestHeight <= topHeight) return
+  const previousTop = blocks.value[0] || null
+  const row = rawBlockToApiBlockItem(base.latest, previousTop)
+  if (!row) return
+  blocks.value = [row, ...blocks.value]
+  if (blocks.value.length > itemsPerPage.value) blocks.value.pop()
+  totalBlocks.value = Math.max(totalBlocks.value, latestHeight)
+}
+
+// When latest block advances and we're on page 1, prepend new block in place
+watch(() => base.latest?.block?.header?.height, (newHeight, oldHeight) => {
+  if (!newHeight) return
+  const newH = Number(newHeight)
+  const oldH = oldHeight ? Number(oldHeight) : 0
+  if (oldH > 0 && newH <= oldH) return
+  tryPrependLatestBlock()
+})
+
+// Poll for latest block while on blocks page (page 1) so table updates reliably
+const latestBlockPollInterval = ref<ReturnType<typeof setInterval> | null>(null)
+const LATEST_BLOCK_POLL_MS = 10_000
+
+// ✅ FIX 1: lastKnownHeight ref declare karo
+const lastKnownHeight = ref<number>(0)
+
+// ✅ FIX 2: prependNewBlock function define karo
+async function prependNewBlock(height: number) {
+  try {
+    const block = await blockchain.rpc.getBaseBlockAt(String(height))
+    if (!block) return
+    const previousTop = blocks.value[0] || null
+    const row = rawBlockToApiBlockItem(block, previousTop)
+    if (!row) return
+    blocks.value = [row, ...blocks.value]
+    if (blocks.value.length > itemsPerPage.value) blocks.value.pop()
+    lastKnownHeight.value = Math.max(lastKnownHeight.value, height)
+  } catch (err) {
+    console.warn(`[prependNewBlock] Could not fetch block ${height}:`, err)
+  }
+}
+
+function startLatestBlockPoll() {
+  if (latestBlockPollInterval.value) return
+  latestBlockPollInterval.value = setInterval(async () => {
+    if (currentPage.value !== 1) return
+    try {
+      await base.fetchLatest()
+      tryPrependLatestBlock()
+    } catch {
+      // ignore
+    }
+  }, LATEST_BLOCK_POLL_MS)
+}
+
+function stopLatestBlockPoll() {
+  if (latestBlockPollInterval.value) {
+    clearInterval(latestBlockPollInterval.value)
+    latestBlockPollInterval.value = null
+  }
+}
 
 // 🔹 Server se blocks fetch karo
 async function getBlocksFromServer() {
@@ -195,9 +320,8 @@ async function getBlocksFromNode() {
       retries++
     }
 
-const latestBlock = base.latest.block
-const currentHeight = Number(latestBlock.header.height)
-
+    const latestBlock = base.latest.block
+    const currentHeight = Number(latestBlock.header.height)
 
     const endHeight = currentHeight - ((currentPage.value - 1) * itemsPerPage.value)
     const startHeight = Math.max(endHeight - itemsPerPage.value + 1, 1)
@@ -210,12 +334,25 @@ const currentHeight = Number(latestBlock.header.height)
       )
     }
 
-
     const fetchedBlocks = await Promise.all(blockPromises)
-    
-    const nodeBlocks = fetchedBlocks
-      .filter(block => block !== null)
-      .map((block: any) => ({
+
+    const validBlocks = fetchedBlocks.filter(block => block !== null)
+
+    // ✅ Production time calculate karo: current block time - previous block time
+    const nodeBlocks = validBlocks.map((block: any, index: number) => {
+      const currentTime = new Date(block.block?.header?.time || '').getTime()
+      // Next block (index+1) is actually older (lower height) - blocks are desc order
+      const prevBlock = validBlocks[index + 1]
+      const prevTime = prevBlock
+        ? new Date(prevBlock.block?.header?.time || '').getTime()
+        : 0
+
+      // Production time = seconds between this block and previous block
+      const productionTimeSec = (prevTime && currentTime && currentTime > prevTime)
+        ? parseFloat(((currentTime - prevTime) / 1000).toFixed(3))
+        : 0
+
+      return {
         id: `${block.block?.header?.chain_id}:${block.block?.header?.height}`,
         height: parseInt(block.block?.header?.height || '0'),
         hash: block.block_id?.hash || '',
@@ -223,10 +360,11 @@ const currentHeight = Number(latestBlock.header.height)
         proposer: block.block?.header?.proposer_address || '',
         chain: block.block?.header?.chain_id || apiChainName.value,
         transaction_count: block.block?.data?.txs?.length || 0,
-        block_production_time: 0,
+        block_production_time: productionTimeSec,
         raw_block_size: 0,
         size: 0
-      }))
+      }
+    })
 
     return {
       blocks: nodeBlocks,
@@ -255,11 +393,14 @@ async function loadBlocks() {
   try {
     const serverData = await getBlocksFromServer()
 
-    blocks.value = serverData.blocks || serverData
-    totalBlocks.value = serverData.total || 0
-    totalPages.value = serverData.totalPages || 0
-    avgBlockProductionTime.value = serverData.avgBlockProductionTime || null
-    avgBlockSize.value = serverData.avgBlockSize || null
+    // Indexer returns { data: [...], meta: { total, page, limit, totalPages, avgBlockProductionTime, avgBlockSize } }
+    const rawBlocks = serverData?.data ?? serverData?.blocks ?? serverData
+    blocks.value = Array.isArray(rawBlocks) ? rawBlocks : []
+    const meta = serverData?.meta ?? serverData
+    totalBlocks.value = meta?.total ?? serverData?.total ?? blocks.value.length
+    totalPages.value = meta?.totalPages ?? serverData?.totalPages ?? (Math.ceil(totalBlocks.value / itemsPerPage.value) || 0)
+    avgBlockProductionTime.value = meta?.avgBlockProductionTime ?? serverData?.avgBlockProductionTime ?? null
+    avgBlockSize.value = meta?.avgBlockSize ?? serverData?.avgBlockSize ?? null
 
     isNodeFallback.value = false
 
@@ -289,15 +430,30 @@ async function loadBlocks() {
     }
   }
 
+  // ✅ Load hone ke baad lastKnownHeight set karo
+  if (blocks.value.length > 0) {
+    lastKnownHeight.value = Math.max(...blocks.value.map(b => Number(b.height)))
+  }
+
   loading.value = false
+
+  // ✅ Race condition fix: agar loadBlocks ke doran currentBlockHeight badh gaya
+  // toh woh blocks miss ho jaate hain - sirf page 1 par check karo
+  if (currentPage.value === 1 && blocks.value.length > 0) {
+    const currentH = Number(currentBlockHeight.value)
+    if (currentH > lastKnownHeight.value) {
+      const missedCount = Math.min(currentH - lastKnownHeight.value, 5)
+      for (let h = lastKnownHeight.value + 1; h <= lastKnownHeight.value + missedCount; h++) {
+        await prependNewBlock(h)
+      }
+    }
+  }
 }
-
-
 
 // Watchers
 watch(itemsPerPage, () => { currentPage.value = 1; loadBlocks() })
 watch(currentPage, () => loadBlocks())
-watch(apiChainName, (n, o) => { if(n!==o){ currentPage.value=1; loadBlocks() } })
+watch(apiChainName, (n, o) => { if (n !== o) { currentPage.value = 1; loadBlocks() } })
 
 // Convert bytes → largest appropriate unit (B, KB, MB, GB, TB, PB)
 function formatBytes(bytes?: number): string {
@@ -327,17 +483,6 @@ function formatProductionTime(secondsStr?: string | number) {
   return `${minutes}m ${seconds}s`  // 60s ya us se upar ko minutes + seconds format me
 }
 
-// ✅ Compute average production time of all loaded blocks
-const averageBlockProductionTime = computed(() => {
-  if (!blocks.value.length) return "0s"
-  const total = blocks.value.reduce((sum, block) => {
-    const time = block.block_production_time ? parseFloat(block.block_production_time as any) : 0
-    return sum + time
-  }, 0)
-  const avgSeconds = total / blocks.value.length
-  return formatProductionTime(avgSeconds) // yaha pe same function use ho raha hai
-})
-
 // Convert seconds → "Xs" or "Xm Ys" without decimal in seconds
 function formatBlockTime(secondsStr?: string | number) {
   if (!secondsStr) return '0s'
@@ -351,16 +496,23 @@ function formatBlockTime(secondsStr?: string | number) {
 }
 
 
-// Pagination
-function goToFirst() { if (currentPage.value !== 1) currentPage.value = 1 }
-function goToLast() { if (currentPage.value !== totalPages.value) currentPage.value = totalPages.value }
-function nextPage() { if (currentPage.value < totalPages.value) currentPage.value++ }
-function prevPage() { if (currentPage.value > 1) currentPage.value-- }
+function setCurrentPage(page: number) {
+  currentPage.value = page
+}
+
+function setItemsPerPage(size: number) {
+  itemsPerPage.value = size
+}
 
 // Auto-load on mount
 onMounted(() => {
   loadNetworkStats()
   loadBlocks()
+  startLatestBlockPoll()
+})
+
+onUnmounted(() => {
+  stopLatestBlockPoll()
 })
 </script>
 
@@ -376,7 +528,7 @@ onMounted(() => {
       <div class="flex items-center">
         <Icon :icon="fallbackError ? 'mdi:alert-octagon' : 'mdi:alert-circle'" class="mr-2 text-xl" />
         <span class="font-medium">
-          <span v-if="!fallbackError">Currently showing data from node because main server is down.</span>
+          <span v-if="!fallbackError">Our system is temporarily under maintenance. You’re currently viewing live data from an alternative source.</span>
           <span v-else>Unable to load data: {{ fallbackError }}. Please check your RPC connection or try again later.</span>
         </span>
       </div>
@@ -417,10 +569,11 @@ onMounted(() => {
       v-show="tab === 'blocks'"
       class="bg-base-200 px-0.5 pt-0.5 pb-4 mb-4 rounded-xl shadow-md bg-gradient-to-b  dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)] border dark:border-white/10 dark:shadow-[0 solid #e5e7eb] hover:shadow-lg"
     >
-      <div class="bg-base-200 rounded-md overflow-auto">
+      <div class="bg-base-200 rounded-md">
+        <div class="overflow-auto" style="max-height:calc(100vh - 26rem)">
         <table class="table table-compact w-full">
           <thead class="dark:bg-[rgba(255,255,255,.03)] bg-base-200 sticky top-0 border-0">
-            <tr class="border-b-[0px] text-sm font-semibold">
+            <tr class="border-b-[0px] text-sm font-semibold bg-base-200">
               <th>{{ $t('block.block_header') }}</th>
               <th>{{ $t('account.hash') }}</th>
               <th>{{ $t('block.proposer') }}</th>
@@ -435,22 +588,35 @@ onMounted(() => {
             </tr>
           </thead>
 
-          <tbody class="bg-base-100 relative">
-            <tr v-if="loading">
-              <td colspan="11" class="py-8">
+          <!-- Loading state -->
+          <tbody v-if="loading" class="bg-base-100">
+            <tr>
+              <td colspan="10" class="py-8">
                 <div class="flex justify-center items-center">
                   <div class="loading loading-spinner loading-md"></div>
                   <span class="ml-2">Loading blocks...</span>
                 </div>
               </td>
             </tr>
-            <tr v-else-if="!loading && blocks.length === 0">
-              <td colspan="11" class="py-8 text-center text-gray-500">No blocks found</td>
+          </tbody>
+
+          <!-- Empty state -->
+          <tbody v-else-if="blocks.length === 0" class="bg-base-100">
+            <tr>
+              <td colspan="10" class="py-8 text-center text-gray-500">No blocks found</td>
             </tr>
+          </tbody>
+
+          <!-- ✅ TransitionGroup tag="tbody" - sahi HTML structure -->
+          <TransitionGroup
+            v-else
+            name="block-slide"
+            tag="tbody"
+            class="bg-base-100"
+          >
             <tr
-              v-else
               v-for="block in blocks"
-              :key="block.id"
+              :key="block.height"
               class="hover:bg-gray-100 dark:hover:bg-[rgba(255,255,255,0.06)] dark:bg-base-200 bg-white border-0 rounded-xl"
             >
               <td class="font-medium dark:text-warning text-[#09279F]">{{ block.height }}</td>
@@ -474,38 +640,22 @@ onMounted(() => {
               <td>{{ networkStats.suppliers.toLocaleString() }}</td>
               <td>{{ networkStats.gateways.toLocaleString() }}</td>
               <!-- <td>{{ 0 }}</td> -->
-              <td>{{ formatBytes(block.raw_block_size) }}</td>
+              <td>{{ formatBytes(getBlockSize(block)) }}</td>
             </tr>
-          </tbody>
+          </TransitionGroup>
         </table>
-
-        <!-- Pagination Bar -->
-        <div class="flex justify-between items-center gap-4 my-6 px-6">
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">Show:</span>
-            <select v-model="itemsPerPage" class="select select-bordered select-sm w-20">
-              <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }}</option>
-            </select>
-            <span class="text-sm text-gray-600">per page</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600">
-              Showing {{ ((currentPage - 1) * itemsPerPage) + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalBlocks) }} of {{ totalBlocks }} blocks
-            </span>
-            <div class="flex items-center gap-1">
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="goToFirst" :disabled="currentPage === 1 || totalPages === 0">First</button>
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="prevPage" :disabled="currentPage === 1 || totalPages === 0">&lt;</button>
-              <span class="text-xs px-2">Page {{ currentPage }} of {{ totalPages }}</span>
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="nextPage" :disabled="currentPage === totalPages || totalPages === 0">&gt;</button>
-              <button class="page-btn bg-[#f8f9fa] border border-[#ccc] rounded px-[10px] py-[5px] cursor-pointer text-[#007bff] transition-colors duration-200 hover:bg-[#e9ecef] disabled:opacity-50 disabled:cursor-not-allowed text-[14px]" 
-                @click="goToLast" :disabled="currentPage === totalPages || totalPages === 0">Last</button>
-            </div>
-          </div>
         </div>
+
+        <TablePagination
+          :current-page="currentPage"
+          :total-pages="totalPages"
+          :total-items="totalBlocks"
+          :items-per-page="itemsPerPage"
+          item-label="blocks"
+          :page-size-options="pageSizeOptions"
+          @update:current-page="setCurrentPage"
+          @update:items-per-page="setItemsPerPage"
+        />
       </div>
     </div>
   </div>
@@ -530,11 +680,34 @@ onMounted(() => {
     padding: 0;
     border: none;
 }
-.page-btn:hover {
-  background-color: #e9ecef;
+
+/* ✅ Naye block ka smooth slide-down animation */
+.block-slide-enter-active {
+  transition: all 0.4s ease;
 }
-.page-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.block-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+.block-slide-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ✅ Purane block ka smooth fade out (jab last row remove ho) */
+.block-slide-leave-active {
+  transition: all 0.3s ease;
+}
+.block-slide-leave-from {
+  opacity: 1;
+}
+.block-slide-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* ✅ Baaki rows ka smooth move jab naya block aaye */
+.block-slide-move {
+  transition: transform 0.4s ease;
 }
 </style>

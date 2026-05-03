@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import authService from '@/api/auth-service'
 import { useToast } from 'vue-toastification'
+import TablePagination from '@/components/TablePagination.vue'
 
 const toast = useToast()
 
@@ -126,14 +127,30 @@ function getPaginatedTokens() {
   return userTokens.value.slice(start, end)
 }
 
-function getTotalPages() {
+const totalPages = computed(() => {
+  if (userTokens.value.length === 0) return 0
   return Math.ceil(userTokens.value.length / itemsPerPage.value)
-}
+})
 
-function changePage(page: number) {
-  if (page >= 1 && page <= getTotalPages()) {
+watch(totalPages, pageCount => {
+  if (pageCount <= 0) {
+    currentPage.value = 1
+    return
+  }
+
+  if (currentPage.value > pageCount) {
+    currentPage.value = pageCount
+  }
+})
+
+function setCurrentPage(page: number) {
+  if (page >= 1 && page <= Math.max(1, totalPages.value)) {
     currentPage.value = page
   }
+}
+
+function setItemsPerPage(size: number) {
+  itemsPerPage.value = size
 }
 
 async function createNewToken() {
@@ -299,71 +316,17 @@ function logout() {
             </table>
           </div>
 
-          <!-- Pagination -->
-          <div v-if="userTokens.length > 0" class="flex items-center justify-between mt-4 pt-2">
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-[#64748B]">Show</span>
-              <select
-                v-model.number="itemsPerPage"
-                @change="currentPage = 1"
-                class="p-4 bg-white dark:bg-gray-700 border border-white-600 dark:border-gray-600 rounded text-[#64748B] focus:outline-none focus:border-blue-500 text-sm"
-              >
-                <option :value="5">5</option>
-                <option :value="10">10</option>
-                <option :value="25">25</option>
-                <option :value="50">50</option>
-              </select>
-              <span class="text-sm text-[#64748B]">per page</span>
-            </div>
-
-            <div class="text-sm text-[#64748B]">
-              Showing {{ (currentPage - 1) * itemsPerPage + 1 }} to {{ Math.min(currentPage * itemsPerPage, userTokens.length) }} of {{ userTokens.length }} tokens
-            </div>
-
-            <div class="flex items-center gap-2">
-              <button
-                @click="changePage(1)"
-                :disabled="currentPage === 1"
-                class="px-[10px] py-[5px] text-[14px] bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-semibold transition-colors"
-              >
-                First
-              </button>
-              <button
-                @click="changePage(currentPage - 1)"
-                :disabled="currentPage === 1"
-                class="px-[10px] py-[5px] text-[14px] bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-semibold transition-colors"
-              >
-                ‹
-              </button>
-
-              <div class="flex items-center gap-1">
-                <button
-                  v-for="page in getTotalPages()"
-                  :key="page"
-                  @click="changePage(page)"
-                  :class="currentPage === page ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
-                  class="px-[10px] py-[5px] text-[14px] rounded text-sm font-semibold transition-colors"
-                >
-                  {{ page }}
-                </button>
-              </div>
-
-              <button
-                @click="changePage(currentPage + 1)"
-                :disabled="currentPage === getTotalPages()"
-                class="px-[10px] py-[5px] text-[14px] bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-semibold transition-colors"
-              >
-                ›
-              </button>
-              <button
-                @click="changePage(getTotalPages())"
-                :disabled="currentPage === getTotalPages()"
-                class="px-[10px] py-[5px] text-[14px] bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-semibold transition-colors"
-              >
-                Last
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            v-if="userTokens.length > 0"
+            :current-page="currentPage"
+            :total-pages="totalPages"
+            :total-items="userTokens.length"
+            :items-per-page="itemsPerPage"
+            item-label="tokens"
+            :page-size-options="[5, 10, 25, 50]"
+            @update:current-page="setCurrentPage"
+            @update:items-per-page="setItemsPerPage"
+          />
 
           <!-- Empty State -->
           <div v-else class="text-center py-12">
