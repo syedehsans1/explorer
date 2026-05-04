@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { Icon } from '@iconify/vue';
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
 
 // Components
@@ -81,6 +81,17 @@ const containerClass = computed(() => {
   return isDocumentationPage.value ? 'mx-auto' : 'mx-auto w-11/12';
 });
 
+const headerHeight = ref(0);
+const mainStyle = computed(() => ({
+  paddingTop: `${headerHeight.value}px`,
+  minHeight: headerHeight.value ? `calc(100vh - ${headerHeight.value}px)` : '100vh',
+}));
+
+const updateHeaderHeight = () => {
+  const header = document.querySelector('.site-header') as HTMLElement | null;
+  headerHeight.value = header?.offsetHeight ?? 0;
+};
+
 // Add this for responsive behavior
 const isMobile = ref(false);
 const visibleNavItems = ref(6); // Number of items to show before using "More" dropdown
@@ -120,15 +131,22 @@ const updateWindowSize = () => {
   }
 };
 
-// Call once on component mount and add event listener
-onMounted(() => {
+const handleResize = () => {
   updateWindowSize();
-  window.addEventListener('resize', updateWindowSize);
+  updateHeaderHeight();
+};
+
+// Call once on component mount and add event listener
+onMounted(async () => {
+  updateWindowSize();
+  await nextTick();
+  updateHeaderHeight();
+  window.addEventListener('resize', handleResize);
 });
 
 // Clean up event listener when component unmounts
 onUnmounted(() => {
-  window.removeEventListener('resize', updateWindowSize);
+  window.removeEventListener('resize', handleResize);
 });
 
 // Compute which items should go in the More dropdown
@@ -166,14 +184,7 @@ const handleSafariChainChange = (event: Event) => {
 
 <template>
   <div class="dark:bg-[#1a1f26]">
-    <header class="
-  fixed top-0 left-0 right-0
-  z-[1000]
-  py-4
-  bg-[rgba(15,20,25,0.9)]
-  backdrop-blur-[12px]
-  border-b border-[rgba(255,255,255,0.05)]
-">
+    <header class="site-header fixed top-0 left-0 right-0 z-[1000] py-4 bg-[rgba(15,20,25,0.9)] backdrop-blur-[12px] border-b border-[rgba(255,255,255,0.05)]">
       <!-- DESKTOP NAV - Only shown on desktop, hidden on mobile -->
       <div class="desktop-nav">
         <div class="container mx-auto px-5 py-2 flex justify-between items-center">
@@ -430,7 +441,7 @@ const handleSafariChainChange = (event: Event) => {
         </div>
       </div>
     </header>
-    <div class="bg-white dark:bg-[#1a1f26]" style="min-height:80vh">
+    <main class="bg-white dark:bg-[#1a1f26]" :style="mainStyle">
       <div :class="containerClass">
         <!-- 👉 Pages -->
         <div class="">
@@ -451,7 +462,7 @@ const handleSafariChainChange = (event: Event) => {
           </RouterView>
         </div>
       </div>
-    </div>
+    </main>
     <newFooter />
   </div>
 </template>
@@ -531,4 +542,13 @@ const handleSafariChainChange = (event: Event) => {
 .dark .safari-select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e2e8f0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
+  .site-header {
+    min-height: 6rem;
+  }
+
+  @media (min-width: 1536px) {
+    .site-header {
+      min-height: 8rem;
+    }
+  }
 </style>
