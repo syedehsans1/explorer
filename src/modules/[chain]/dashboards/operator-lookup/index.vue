@@ -230,7 +230,7 @@ watch(activeTab, (newTab) => {
 </script>
 
 <template>
-  <div class="pt-[6.5rem]">
+  <div class="pt-4">
     <div class="flex items-center justify-between my-4">
       <p class="text-2xl rounded-xl px-4 py-2 font-bold">
         Operator Lookup Dashboard

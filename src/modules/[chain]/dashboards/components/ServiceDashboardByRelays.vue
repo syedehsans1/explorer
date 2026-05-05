@@ -117,6 +117,11 @@ const serviceRewardsMeta = ref<ApiMeta | null>(null);
 const serviceRewardsPage = ref(1);
 const serviceRewardsLimit = ref(10);
 const serviceRewardsDays = ref(7);
+const daysLabel = computed(() => {
+  if (serviceRewardsDays.value === 1) return '24h';
+  if (serviceRewardsDays.value === 2) return '48h';
+  return `${serviceRewardsDays.value}d`;
+});
 const serviceRewardsSortBy = ref<'rewards' | 'relays' | 'efficiency' | 'submissions' | 'reward_per_relay'>('rewards');
 const serviceRewardsSortOrder = ref<'asc' | 'desc'>('desc');
 
@@ -419,7 +424,7 @@ onMounted(() => {
     <!-- KPI Summary Cards -->
     <div class="mb-4">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-xs text-secondary font-medium">Summary — Last {{ serviceRewardsDays }} days</span>
+        <span class="text-xs text-secondary font-medium">Summary — Last {{ daysLabel }}</span>
       </div>
 
       <!-- Skeleton while loading (initial load AND on days/filter change) -->
@@ -459,14 +464,16 @@ onMounted(() => {
       <div class="main-dashboard">
         <h2 class="text-xl font-bold">Service Performance Dashboard</h2>
         <div class="flex items-center gap-2">
-          <span class="text-xs text-secondary">Days:</span>
+          <span class="text-xs text-secondary">Duration:</span>
           <select v-model="serviceRewardsDays"
             class="select select-bordered select-sm text-xs hover:bg-base-200 dark:bg-[rgba(255,255,255,.03)] dark:hover:bg-[rgba(255,255,255,0.06)]">
-            <option :value="7">7</option>
-            <option :value="15">15</option>
-            <option :value="30">30</option>
-            <option :value="60">60</option>
-            <option :value="90">90</option>
+            <option :value="1">24h</option>
+            <option :value="2">48h</option>
+            <option :value="7">7d</option>
+            <option :value="15">15d</option>
+            <option :value="30">30d</option>
+            <option :value="60">60d</option>
+            <option :value="90">90d</option>
           </select>
         </div>
       </div>
@@ -556,7 +563,7 @@ onMounted(() => {
         <div class="flex flex-col bg-white dark:bg-[rgba(255,255,255,.03)] p-4 rounded-xl shadow-md border dark:border-white/10 hover:bg-base-200 dark:hover:bg-[rgba(255,255,255,0.06)] hover:shadow-lg transition-shadow">
           <div class="flex items-center justify-between mb-1">
             <h3 class="text-sm font-semibold">Rewards Share Distribution</h3>
-            <span class="text-xs text-secondary">Top 20 · Last {{ serviceRewardsDays }}d</span>
+            <span class="text-xs text-secondary">Top 20 · Last {{ daysLabel }}</span>
           </div>
           <div v-if="rewardsDistributionChart.series.length === 0"
             class="flex items-center justify-center h-[420px] text-secondary text-sm">No data</div>
@@ -568,7 +575,7 @@ onMounted(() => {
         <div class="flex flex-col bg-white dark:bg-[rgba(255,255,255,.03)] p-4 rounded-xl shadow-md border dark:border-white/10 hover:bg-base-200 dark:hover:bg-[rgba(255,255,255,0.06)] hover:shadow-lg transition-shadow">
           <div class="flex items-center justify-between mb-1">
             <h3 class="text-sm font-semibold">Compute Units</h3>
-            <span class="text-xs text-secondary">Top 20 · Last {{ serviceRewardsDays }}d</span>
+            <span class="text-xs text-secondary">Top 20 · Last {{ daysLabel }}</span>
           </div>
           <div v-if="computeUnitsChart.labels.length === 0"
             class="flex items-center justify-center h-[420px] text-secondary text-sm">No data</div>

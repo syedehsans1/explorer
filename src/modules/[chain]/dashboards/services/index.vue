@@ -9,10 +9,6 @@ const chainStore = useBlockchain();
 
 <template>
   <div>
-    <div class="flex items-center justify-between my-4">
-      <p class="text-2xl rounded-xl px-4 py-2 font-bold card-title">{{ $t('module.services') }} Dashboard</p>
-    </div>
-
     <ServiceDashboardByComputeUnits :chain="chainStore?.current?.chainName || props.chain" />
 
     <ServiceDashboardByRelays :chain="chainStore?.current?.chainName || props.chain" />
