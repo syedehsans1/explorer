@@ -1516,7 +1516,7 @@ function formatBlockTime(secondsStr?: string | number) {
 <template>
   <div class="">
 
-      <div class="bg-base-100 dark:bg-[#1a1f26] pt-[6.5rem]">
+      <div class="bg-base-100 dark:bg-[#1a1f26] pt-[1.5rem]">
       <!-- Subtle Indexer Lag Alert -->
       <div v-if="isIndexerBehind && currentChainIndexerStatus" 
         class="mx-4 mt-2 mb-2 px-4 py-2 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 dark:border-amber-500/40 flex items-center gap-2 text-sm">
